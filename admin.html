@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>后台管理 - 明日记忆</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* 登录 */
+    .login-overlay {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .login-overlay.hidden { display: none; }
+    .login-card {
+      background: #fff; border-radius: 16px; padding: 40px 32px;
+      width: 360px; max-width: 90vw;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+    .login-card h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    .login-card p { color: #999; font-size: 0.85rem; margin-bottom: 20px; }
+    .login-card input {
+      width: 100%; padding: 12px 16px; font-size: 1rem;
+      border: 1px solid #ddd; border-radius: 10px;
+      outline: none; margin-bottom: 12px; text-align: center;
+    }
+    .login-card input:focus { border-color: #667eea; }
+    .login-card button {
+      width: 100%; padding: 12px; font-size: 1rem; font-weight: 600;
+      border: none; border-radius: 10px;
+      background: #667eea; color: #fff; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .login-card button:hover { background: #5a6fd6; }
+    .login-error { color: #e74c3c; font-size: 0.85rem; margin-bottom: 8px; display: none; }
+
+    /* 主布局 */
+    .dashboard { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+    .dashboard-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .dashboard-header h1 { font-size: 1.4rem; }
+    .btn-logout {
+      padding: 8px 20px; border: 1px solid #ddd; border-radius: 8px;
+      background: #fff; cursor: pointer; font-size: 0.9rem;
+      transition: background 0.15s;
+    }
+    .btn-logout:hover { background: #f5f5f5; }
+
+    /* 统计卡片 */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card {
+      background: #fff; border-radius: 12px; padding: 20px 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    .stat-card .label { font-size: 0.85rem; color: #999; margin-bottom: 6px; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; color: #333; }
+    .stat-card.primary .value { color: #667eea; }
+    .stat-card.success .value { color: #27ae60; }
+
+    /* 用户表格 */
+    .table-card {
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+    .table-header {
+      padding: 16px 24px; border-bottom: 1px solid #f0f0f0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .table-header h2 { font-size: 1.1rem; }
+    .table-header .total { color: #999; font-size: 0.85rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 12px 24px; font-size: 0.8rem; color: #999; text-transform: uppercase; font-weight: 500; background: #fafafa; }
+    td { padding: 14px 24px; border-top: 1px solid #f5f5f5; font-size: 0.9rem; }
+    tr:hover td { background: #fafbff; }
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 0.8rem; background: #eef2ff; color: #667eea;
+    }
+
+    /* 分页 */
+    .pagination {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; padding: 16px;
+    }
+    .pagination button {
+      padding: 8px 16px; border: 1px solid #ddd; border-radius: 8px;
+      background: #fff; cursor: pointer; font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+    .pagination button:hover:not(:disabled) { border-color: #667eea; color: #667eea; }
+    .pagination button:disabled { color: #ccc; cursor: not-allowed; }
+    .pagination .page-info { font-size: 0.85rem; color: #999; }
+
+    .empty { text-align: center; padding: 60px 0; color: #bbb; }
+    .loading { text-align: center; padding: 40px 0; color: #999; }
+  </style>
+</head>
+<body>
+  <!-- 登录 -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+      <h1>明日记忆</h1>
+      <p>后台管理</p>
+      <div id="loginError" class="login-error"></div>
+      <input type="password" id="adminPassword" placeholder="请输入管理密码" autofocus />
+      <button id="loginBtn">登 录</button>
+    </div>
+  </div>
+
+  <!-- 仪表盘 -->
+  <div class="dashboard" id="dashboard" style="display:none">
+    <div class="dashboard-header">
+      <h1>管理后台</h1>
+      <button class="btn-logout" id="logoutBtn">退出</button>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card primary">
+        <div class="label">总用户数</div>
+        <div class="value" id="statUsers">-</div>
+      </div>
+      <div class="stat-card success">
+        <div class="label">今日新增</div>
+        <div class="value" id="statToday">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">有数据的用户</div>
+        <div class="value" id="statWordbooks">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">人均单词数</div>
+        <div class="value" id="statAvg">-</div>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-header">
+        <h2>用户列表</h2>
+        <span class="total" id="tableTotal"></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>手机号</th>
+            <th>单词数</th>
+            <th>注册时间</th>
+            <th>最近活跃</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody">
+          <tr><td colspan="5" class="loading">加载中...</td></tr>
+        </tbody>
+      </table>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+    let adminToken = localStorage.getItem('adminToken') || '';
+    let currentPage = 1;
+
+    const loginOverlay = document.getElementById('loginOverlay');
+    const dashboard = document.getElementById('dashboard');
+    const loginError = document.getElementById('loginError');
+
+    // 初始化
+    if (adminToken) {
+      verifyAndEnter();
+    }
+
+    // 登录事件
+    document.getElementById('loginBtn').addEventListener('click', login);
+    document.getElementById('adminPassword').addEventListener('keydown', e => {
+      if (e.key === 'Enter') login();
+    });
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      localStorage.removeItem('adminToken');
+      adminToken = '';
+      loginOverlay.classList.remove('hidden');
+      dashboard.style.display = 'none';
+    });
+
+    async function login() {
+      const password = document.getElementById('adminPassword').value;
+      if (!password) return;
+      try {
+        const resp = await fetch(API + '/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          loginError.textContent = data.error;
+          loginError.style.display = 'block';
+          return;
+        }
+        adminToken = data.token;
+        localStorage.setItem('adminToken', adminToken);
+        loginError.style.display = 'none';
+        showDashboard();
+      } catch {
+        loginError.textContent = '网络错误';
+        loginError.style.display = 'block';
+      }
+    }
+
+    async function verifyAndEnter() {
+      try {
+        const resp = await fetch(API + '/api/admin/stats', {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        if (resp.ok) {
+          showDashboard();
+        } else {
+          localStorage.removeItem('adminToken');
+          adminToken = '';
+        }
+      } catch {
+        // keep trying
+        showDashboard();
+      }
+    }
+
+    function showDashboard() {
+      loginOverlay.classList.add('hidden');
+      dashboard.style.display = 'block';
+      loadStats();
+      loadUsers(1);
+    }
+
+    async function loadStats() {
+      try {
+        const resp = await fetch(API + '/api/admin/stats', {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        const data = await resp.json();
+        document.getElementById('statUsers').textContent = data.totalUsers;
+        document.getElementById('statToday').textContent = data.usersToday;
+        document.getElementById('statWordbooks').textContent = data.totalWords;
+        document.getElementById('statAvg').textContent = data.avgWords;
+      } catch {}
+    }
+
+    async function loadUsers(page) {
+      currentPage = page;
+      const tbody = document.getElementById('userTableBody');
+      tbody.innerHTML = '<tr><td colspan="5" class="loading">加载中...</td></tr>';
+      try {
+        const resp = await fetch(API + `/api/admin/users?page=${page}&pageSize=20`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        const data = await resp.json();
+        document.getElementById('tableTotal').textContent = `共 ${data.total} 人`;
+
+        if (data.users.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无用户</td></tr>';
+        } else {
+          tbody.innerHTML = data.users.map(u => `
+            <tr>
+              <td>${u.id}</td>
+              <td>${u.phone}</td>
+              <td><span class="badge">${u.word_count} 个</span></td>
+              <td>${formatTime(u.created_at)}</td>
+              <td>${u.last_active ? formatTime(u.last_active) : '-'}</td>
+            </tr>
+          `).join('');
+        }
+
+        // 分页
+        const totalPages = Math.ceil(data.total / data.pageSize);
+        let pagHTML = '';
+        pagHTML += `<button ${page <= 1 ? 'disabled' : ''} onclick="loadUsers(${page - 1})">上一页</button>`;
+        pagHTML += `<span class="page-info">第 ${page} / ${totalPages} 页</span>`;
+        pagHTML += `<button ${page >= totalPages ? 'disabled' : ''} onclick="loadUsers(${page + 1})">下一页</button>`;
+        document.getElementById('pagination').innerHTML = pagHTML;
+      } catch {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">加载失败</td></tr>';
+      }
+    }
+
+    function formatTime(ts) {
+      if (!ts) return '-';
+      const d = new Date(ts);
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0') + ' ' +
+        String(d.getHours()).padStart(2, '0') + ':' +
+        String(d.getMinutes()).padStart(2, '0');
+    }
+  </script>
+</body>
+</html>

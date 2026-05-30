@@ -20,11 +20,10 @@ const toastUndo = document.getElementById('toastUndo');
 const resizeHandle = document.getElementById('wordbookResizeHandle');
 const btnLogin = document.getElementById('btnLogin');
 const authModal = document.getElementById('authModal');
-const authTabLogin = document.getElementById('authTabLogin');
-const authTabReg = document.getElementById('authTabReg');
 const authForm = document.getElementById('authForm');
-const authUsername = document.getElementById('authUsername');
-const authPassword = document.getElementById('authPassword');
+const authPhone = document.getElementById('authPhone');
+const authCode = document.getElementById('authCode');
+const sendCodeBtn = document.getElementById('sendCodeBtn');
 const authSubmit = document.getElementById('authSubmit');
 const authError = document.getElementById('authError');
 const closeAuthBtn = document.getElementById('closeAuthBtn');
@@ -39,10 +38,10 @@ let reviewMode = loadReviewMode();
 let isCardAnimating = false;
 let authToken = localStorage.getItem('authToken') || '';
 let isLoggedIn = false;
-let authMode = 'login';
+let codeTimer = null;
 let syncTimer = null;
 
-const API_BASE = 'http://localhost:3001';
+const API_BASE = '';
 const translationCache = {};
 const MODE_LABELS = {
   sequential: '顺序背诵',
@@ -111,76 +110,115 @@ btnLogin.addEventListener('click', () => {
 });
 closeAuthBtn.addEventListener('click', hideAuthModal);
 authModal.addEventListener('click', (e) => { if (e.target === authModal) hideAuthModal(); });
-authTabLogin.addEventListener('click', () => switchAuthTab('login'));
-authTabReg.addEventListener('click', () => switchAuthTab('register'));
 authForm.addEventListener('submit', handleAuth);
+sendCodeBtn.addEventListener('click', sendCode);
 
 document.addEventListener('keydown', onKeyboard);
 
 // ===== 认证 =====
 function showAuthModal() {
   authModal.classList.remove('hidden');
-  authUsername.value = '';
-  authPassword.value = '';
+  authPhone.value = '';
+  authCode.value = '';
   authError.classList.add('hidden');
-  switchAuthTab('login');
-  authUsername.focus();
+  authSubmit.disabled = false;
+  authSubmit.textContent = '登录 / 注册';
+  resetCodeBtn();
+  authPhone.focus();
 }
 
 function hideAuthModal() {
   authModal.classList.add('hidden');
+  clearInterval(codeTimer);
 }
 
-function switchAuthTab(mode) {
-  authMode = mode;
-  if (mode === 'login') {
-    authTabLogin.classList.add('active');
-    authTabReg.classList.remove('active');
-    authSubmit.textContent = '登录';
-  } else {
-    authTabReg.classList.add('active');
-    authTabLogin.classList.remove('active');
-    authSubmit.textContent = '注册';
+function sendCode() {
+  const phone = authPhone.value.trim();
+  if (!/^1[3-9]\d{9}$/.test(phone)) {
+    authError.textContent = '请输入正确的手机号';
+    authError.classList.remove('hidden');
+    return;
   }
   authError.classList.add('hidden');
+  sendCodeBtn.disabled = true;
+
+  fetch(API_BASE + '/api/send-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone }),
+  }).then(resp => resp.json()).then(data => {
+    if (!data.ok) {
+      authError.textContent = data.error || '发送失败';
+      authError.classList.remove('hidden');
+      resetCodeBtn();
+      return;
+    }
+    startCodeCountdown();
+  }).catch(() => {
+    authError.textContent = '网络错误，请确保服务已启动';
+    authError.classList.remove('hidden');
+    resetCodeBtn();
+  });
+}
+
+function startCodeCountdown() {
+  let sec = 60;
+  sendCodeBtn.textContent = sec + 's 后重发';
+  sendCodeBtn.disabled = true;
+  clearInterval(codeTimer);
+  codeTimer = setInterval(() => {
+    sec--;
+    sendCodeBtn.textContent = sec + 's 后重发';
+    if (sec <= 0) resetCodeBtn();
+  }, 1000);
+}
+
+function resetCodeBtn() {
+  clearInterval(codeTimer);
+  sendCodeBtn.textContent = '获取验证码';
+  sendCodeBtn.disabled = false;
 }
 
 async function handleAuth(e) {
   e.preventDefault();
-  const username = authUsername.value.trim();
-  const password = authPassword.value;
-  if (!username || !password) {
-    authError.textContent = '请填写用户名和密码';
+  const phone = authPhone.value.trim();
+  const code = authCode.value.trim();
+  if (!phone || !code) {
+    authError.textContent = '请输入手机号和验证码';
+    authError.classList.remove('hidden');
+    return;
+  }
+  if (!/^1[3-9]\d{9}$/.test(phone)) {
+    authError.textContent = '手机号格式不正确';
     authError.classList.remove('hidden');
     return;
   }
 
   authError.classList.add('hidden');
   authSubmit.disabled = true;
-  authSubmit.textContent = authMode === 'login' ? '登录中...' : '注册中...';
+  authSubmit.textContent = '登录中...';
 
   try {
-    const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
-    const resp = await fetch(API_BASE + endpoint, {
+    const resp = await fetch(API_BASE + '/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ phone, code }),
     });
     const data = await resp.json();
     if (!resp.ok) {
-      authError.textContent = data.error || '操作失败';
+      authError.textContent = data.error || '登录失败';
       authError.classList.remove('hidden');
       authSubmit.disabled = false;
-      authSubmit.textContent = authMode === 'login' ? '登录' : '注册';
+      authSubmit.textContent = '登录 / 注册';
       return;
     }
-    loginSuccess(data.token, data.username);
+    loginSuccess(data.token, data.phone);
     hideAuthModal();
   } catch {
     authError.textContent = '网络错误，请确保服务已启动';
     authError.classList.remove('hidden');
     authSubmit.disabled = false;
-    authSubmit.textContent = authMode === 'login' ? '登录' : '注册';
+    authSubmit.textContent = '登录 / 注册';
   }
 }
 
@@ -191,30 +229,27 @@ async function initAuth() {
     return;
   }
 
-  // 验证 token 是否有效
   try {
     const resp = await fetch(API_BASE + '/api/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (resp.ok) {
       const data = await resp.json();
-      loginSuccess(token, data.username, true);
+      loginSuccess(token, data.phone, true);
       return;
     }
   } catch {}
 
-  // token 无效，回退本地
   localStorage.removeItem('authToken');
   wordbookData = loadWordbookLocal();
 }
 
-function loginSuccess(token, username, silent) {
+function loginSuccess(token, phone, silent) {
   authToken = token;
   isLoggedIn = true;
   localStorage.setItem('authToken', token);
-  updateLoginUI(username);
+  updateLoginUI(phone);
 
-  // 从服务器加载词库
   loadFromServer().then(data => {
     wordbookData = data;
   }).catch(() => {
@@ -241,13 +276,14 @@ function logout() {
   if (panelReview.classList.contains('active')) renderFlashcard();
 }
 
-function updateLoginUI(username) {
-  if (username) {
-    btnLogin.textContent = username.slice(0, 1).toUpperCase();
-    btnLogin.title = username + '（点击退出）';
+function updateLoginUI(phone) {
+  if (phone) {
+    const show = phone.slice(-4);
+    btnLogin.textContent = show;
+    btnLogin.title = phone + '（点击退出）';
     btnLogin.classList.add('logged-in');
   } else {
-    btnLogin.textContent = '👤';
+    btnLogin.textContent = '登录';
     btnLogin.title = '登录';
     btnLogin.classList.remove('logged-in');
   }
@@ -295,13 +331,14 @@ async function lookupWord() {
   showResult({ loading: true });
 
   try {
-    const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-    if (!resp.ok) throw new Error('not_found');
+    const resp = await fetch(API_BASE + '/api/lookup?word=' + encodeURIComponent(word));
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error || 'not_found');
+    }
     const data = await resp.json();
-    const entry = data[0];
-    const zhMeanings = await fetchChinese(entry);
-    renderWord(entry, zhMeanings);
-    autoAddToWordbook(entry, zhMeanings);
+    renderWord(data);
+    autoAddToWordbook(data);
   } catch (err) {
     if (err.message === 'not_found') {
       showResult({ error: true, word });
@@ -309,47 +346,6 @@ async function lookupWord() {
       showResult({ networkError: true });
     }
   }
-}
-
-// ===== 中文翻译 =====
-async function fetchChinese(entry) {
-  const textsToTranslate = [];
-  const sources = [];
-  for (const m of entry.meanings || []) {
-    if (m.definitions?.[0]?.definition) {
-      sources.push({ pos: m.partOfSpeech, text: m.definitions[0].definition });
-      textsToTranslate.push(m.definitions[0].definition);
-    }
-  }
-
-  if (textsToTranslate.length === 0) return [];
-
-  const combined = textsToTranslate.join(' ||| ');
-  let translatedTexts;
-
-  if (translationCache[combined]) {
-    translatedTexts = translationCache[combined];
-  } else {
-    try {
-      const resp = await fetch(
-        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(combined)}&langpair=en|zh`
-      );
-      const data = await resp.json();
-      if (data.responseStatus === 200 || data.responseData?.translatedText) {
-        translatedTexts = data.responseData.translatedText.split(' ||| ');
-        translationCache[combined] = translatedTexts;
-      } else {
-        translatedTexts = textsToTranslate.map(() => '');
-      }
-    } catch {
-      translatedTexts = textsToTranslate.map(() => '');
-    }
-  }
-
-  return sources.map((s, i) => ({
-    pos: s.pos,
-    zh: translatedTexts[i] || '',
-  }));
 }
 
 // ===== 渲染查单词结果 =====
@@ -371,37 +367,42 @@ function showResult(state) {
   }
 }
 
-function renderWord(entry, zhMeanings) {
-  const phonetic = entry.phonetic || (entry.phonetics?.find(p => p.text)?.text) || '';
-  const audioSrc = entry.phonetics?.find(p => p.audio)?.audio || '';
-
-  const zhMap = {};
-  zhMeanings.forEach(z => { zhMap[z.pos] = z.zh; });
+function renderWord(data) {
+  const word = data.word;
+  const phonetic = data.phonetic || '';
+  const audioSrc = data.speaksUrl || '';
+  const translation = data.translation || '';
 
   let meaningsHTML = '';
-  for (const m of entry.meanings || []) {
-    const zh = zhMap[m.partOfSpeech] || '';
-    const defsHTML = m.definitions.slice(0, 3).map(d => `
-      <div class="definition-item">
-        <div class="definition-text">${d.definition}</div>
-        ${d.example ? `<div class="definition-example">"${d.example}"</div>` : ''}
-      </div>
-    `).join('');
-    meaningsHTML += `
-      <div class="meaning-section">
-        <span class="part-of-speech">${m.partOfSpeech}</span>
-        ${zh ? `<span class="zh-meaning">${zh}</span>` : ''}
-        ${defsHTML}
-      </div>`;
+
+  if (data.definitions && data.definitions.length > 0) {
+    // 分组渲染：词性 + 释义 + 例句
+    let currentPos = '';
+    data.definitions.forEach(d => {
+      if (d.pos !== currentPos) {
+        if (currentPos) meaningsHTML += '</div>';
+        currentPos = d.pos;
+        meaningsHTML += `<div class="meaning-section"><span class="part-of-speech">${d.pos}</span>`;
+      }
+      meaningsHTML += `
+        <div class="definition-item">
+          <div class="definition-text">${d.def}</div>
+          ${d.example ? `<div class="definition-example">"${d.example}"</div>` : ''}
+        </div>`;
+    });
+    if (currentPos) meaningsHTML += '</div>';
+  } else if (translation) {
+    meaningsHTML = `<div class="definition-item"><div class="definition-text">${translation}</div></div>`;
   }
 
   resultArea.innerHTML = `
     <div class="word-card">
       <div class="word-head">
-        <span class="word-spelling">${entry.word}</span>
-        ${phonetic ? `<span class="word-phonetic">${phonetic}</span>` : ''}
+        <span class="word-spelling">${word}</span>
+        ${phonetic ? `<span class="word-phonetic">/${phonetic}/</span>` : ''}
         ${audioSrc ? `<button class="word-audio-btn" onclick="playAudio('${audioSrc.replace(/'/g, "\\'")}')" title="发音">🔊</button>` : ''}
       </div>
+      ${translation ? `<div class="zh-meaning" style="font-size:1.1rem;font-weight:700;color:#667eea;margin-bottom:12px">${translation}</div>` : ''}
       ${meaningsHTML}
     </div>`;
 }
@@ -412,19 +413,11 @@ function playAudio(src) {
 }
 
 // ===== 单词本操作 =====
-function autoAddToWordbook(entry, zhMeanings) {
-  const word = entry.word;
-  const phonetic = entry.phonetic || (entry.phonetics?.find(p => p.text)?.text) || '';
-  const zh = zhMeanings[0]?.zh || entry.meanings?.[0]?.definitions?.[0]?.definition || '';
-
-  const definitions = (entry.meanings || []).flatMap(m =>
-    m.definitions.slice(0, 2).map(d => ({
-      pos: m.partOfSpeech,
-      definition: d.definition,
-      example: d.example || '',
-      zh: zhMeanings.find(z => z.pos === m.partOfSpeech)?.zh || '',
-    }))
-  );
+function autoAddToWordbook(data) {
+  const word = data.word;
+  const phonetic = data.phonetic || '';
+  const zh = data.translation || '';
+  const definitions = data.definitions || [];
 
   if (wordbookData.some(w => w.word === word)) {
     return;
@@ -591,7 +584,7 @@ function renderFlashcard() {
     defsHTML += `
       <div class="card-def-section">
         <div class="card-pos">${d.pos}</div>
-        <div class="card-def">${d.definition}</div>
+        <div class="card-def">${d.def}</div>
         ${d.example ? `<div class="card-example">"${d.example}"</div>` : ''}
       </div>`;
   }
@@ -779,7 +772,7 @@ function rebuildFlashcardDOM() {
     defsHTML += `
       <div class="card-def-section">
         <div class="card-pos">${d.pos}</div>
-        <div class="card-def">${d.definition}</div>
+        <div class="card-def">${d.def}</div>
         ${d.example ? `<div class="card-example">"${d.example}"</div>` : ''}
       </div>`;
   }
