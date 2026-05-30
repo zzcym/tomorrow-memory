@@ -431,6 +431,45 @@ body {
   font-style: italic;
 }
 
+/* 词形变化 */
+.exchange-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.exchange-item {
+  background: #f0f0f5;
+  color: #666;
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+/* 考试标签 */
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.tag-item {
+  background: #e8f0fe;
+  color: #5a7ec9;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+.freq-stars {
+  color: #f0b400;
+  font-size: 0.85rem;
+  margin-left: 8px;
+}
+
 .error-card {
   background: #fff;
   border-radius: 16px;

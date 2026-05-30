@@ -370,39 +370,62 @@ function showResult(state) {
 function renderWord(data) {
   const word = data.word;
   const phonetic = data.phonetic || '';
-  const audioSrc = data.speaksUrl || '';
-  const translation = data.translation || '';
+  const tag = data.tag || '';
+  const freq = data.freq || 0;
+  const exchange = data.exchange || {};
 
   let meaningsHTML = '';
 
-  if (data.definitions && data.definitions.length > 0) {
-    // 分组渲染：词性 + 释义 + 例句
-    let currentPos = '';
-    data.definitions.forEach(d => {
-      if (d.pos !== currentPos) {
-        if (currentPos) meaningsHTML += '</div>';
-        currentPos = d.pos;
-        meaningsHTML += `<div class="meaning-section"><span class="part-of-speech">${d.pos}</span>`;
-      }
+  if (data.groups && data.groups.length > 0) {
+    data.groups.forEach(g => {
+      const posLabel = g.pos ? `<span class="part-of-speech">${g.pos}</span>` : '';
+      const meaningText = g.meanings.join('；');
       meaningsHTML += `
-        <div class="definition-item">
-          <div class="definition-text">${d.def}</div>
-          ${d.example ? `<div class="definition-example">"${d.example}"</div>` : ''}
+        <div class="meaning-section">
+          ${posLabel}
+          <span class="zh-meaning">${meaningText}</span>
         </div>`;
     });
-    if (currentPos) meaningsHTML += '</div>';
-  } else if (translation) {
-    meaningsHTML = `<div class="definition-item"><div class="definition-text">${translation}</div></div>`;
+  } else if (data.translation) {
+    meaningsHTML = `<div class="definition-item"><div class="definition-text">${data.translation}</div></div>`;
+  } else if (data.notFound) {
+    meaningsHTML = '<div class="placeholder" style="color:#999">未找到该单词</div>';
+  }
+
+  // 词形变化
+  let exchangeHTML = '';
+  const exLabels = { plural: '复数', past: '过去式', present: '现在分词', third: '三单', pastParticiple: '过去分词', comparative: '比较级', superlative: '最高级' };
+  const exEntries = Object.entries(exchange).filter(([k]) => exLabels[k]);
+  if (exEntries.length > 0) {
+    exchangeHTML = '<div class="exchange-row">' +
+      exEntries.map(([k, v]) => `<span class="exchange-item">${exLabels[k]}: ${v}</span>`).join('') +
+      '</div>';
+  }
+
+  // 标签
+  let tagHTML = '';
+  if (tag) {
+    const tags = tag.split(' ').filter(t => t);
+    tagHTML = '<div class="tag-row">' + tags.map(t => `<span class="tag-item">${t.toUpperCase()}</span>`).join('') + '</div>';
+  }
+
+  // 星级
+  let starsHTML = '';
+  if (freq > 0) {
+    starsHTML = '<span class="freq-stars">' + '★'.repeat(Math.min(freq, 5)) + '</span>';
   }
 
   resultArea.innerHTML = `
     <div class="word-card">
       <div class="word-head">
-        <span class="word-spelling">${word}</span>
-        ${phonetic ? `<span class="word-phonetic">/${phonetic}/</span>` : ''}
-        ${audioSrc ? `<button class="word-audio-btn" onclick="playAudio('${audioSrc.replace(/'/g, "\\'")}')" title="发音">🔊</button>` : ''}
+        <div>
+          <span class="word-spelling">${word}</span>
+          ${phonetic ? `<span class="word-phonetic">/${phonetic}/</span>` : ''}
+          ${starsHTML}
+        </div>
       </div>
-      ${translation ? `<div class="zh-meaning" style="font-size:1.1rem;font-weight:700;color:#667eea;margin-bottom:12px">${translation}</div>` : ''}
+      ${tagHTML}
+      ${exchangeHTML}
       ${meaningsHTML}
     </div>`;
 }
@@ -417,13 +440,15 @@ function autoAddToWordbook(data) {
   const word = data.word;
   const phonetic = data.phonetic || '';
   const zh = data.translation || '';
-  const definitions = data.definitions || [];
+  const groups = data.groups || [];
+  const exchange = data.exchange || {};
+  const tag = data.tag || '';
 
   if (wordbookData.some(w => w.word === word)) {
     return;
   }
 
-  wordbookData.unshift({ word, phonetic, meaning: zh, definitions, lastReviewTime: null });
+  wordbookData.unshift({ word, phonetic, meaning: zh, groups, exchange, tag, lastReviewTime: null });
   saveWordbook();
   renderWordbook();
   updateBadge();
@@ -579,13 +604,12 @@ function renderFlashcard() {
   if (!w) return;
 
   let defsHTML = '';
-  const defs = w.definitions || [];
-  for (const d of defs) {
+  const groups = w.groups || [];
+  for (const g of groups) {
     defsHTML += `
       <div class="card-def-section">
-        <div class="card-pos">${d.pos}</div>
-        <div class="card-def">${d.def}</div>
-        ${d.example ? `<div class="card-example">"${d.example}"</div>` : ''}
+        ${g.pos ? `<div class="card-pos">${g.pos}</div>` : ''}
+        <div class="card-def">${g.meanings.join('；')}</div>
       </div>`;
   }
   if (!defsHTML && w.meaning) {
@@ -767,13 +791,12 @@ function rebuildFlashcardDOM() {
   if (!w) return;
 
   let defsHTML = '';
-  const defs = w.definitions || [];
-  for (const d of defs) {
+  const groups = w.groups || [];
+  for (const g of groups) {
     defsHTML += `
       <div class="card-def-section">
-        <div class="card-pos">${d.pos}</div>
-        <div class="card-def">${d.def}</div>
-        ${d.example ? `<div class="card-example">"${d.example}"</div>` : ''}
+        ${g.pos ? `<div class="card-pos">${g.pos}</div>` : ''}
+        <div class="card-def">${g.meanings.join('；')}</div>
       </div>`;
   }
   if (!defsHTML && w.meaning) {

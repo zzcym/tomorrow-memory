@@ -143,65 +143,84 @@ app.post('/api/login', (req, res) => {
   res.json({ token, phone });
 });
 
-// ===== 查单词（有道翻译 + 词典） =====
-const crypto = require('crypto');
-const YOUDAO_APP_KEY = '115fb00277c7315b';
-const YOUDAO_SECRET = 'EI7VnZNuHkft9z9ihlVXnInCV09Kjc7D';
+// ===== 离线词典（ECDICT SQLite） =====
+const dictDb = new Database(path.join(__dirname, 'stardict.db'), { readonly: true });
 
-app.get('/api/lookup', async (req, res) => {
+function parseTranslation(trans) {
+  // 解析 "n. 冲突, 矛盾\nvi. 争执, 抵触\n[计] 冲突" 格式
+  if (!trans) return [];
+  const groups = [];
+  const lines = trans.split('\n').filter(l => l.trim());
+  for (const line of lines) {
+    const m = line.match(/^(\[?\w+\]?\.?)\s*(.+)/);
+    if (m) {
+      groups.push({ pos: m[1].trim(), meanings: m[2].split(/[,;，；]/).map(s => s.trim()).filter(Boolean) });
+    } else {
+      // 无法解析的，整体作为一个释义
+      if (groups.length === 0) groups.push({ pos: '', meanings: [line.trim()] });
+    }
+  }
+  return groups;
+}
+
+function parseExchange(ex) {
+  // 解析 "s:conflicts/p:conflicted/i:conflicting/3:conflicts/d:conflicted"
+  if (!ex) return {};
+  const result = {};
+  const parts = ex.split('/');
+  const map = { s: 'plural', p: 'past', i: 'present', '3': 'third', d: 'pastParticiple', r: 'comparative', t: 'superlative', '0': 'base', '1': 'base' };
+  for (const p of parts) {
+    const [k, v] = p.split(':');
+    if (k && v) result[map[k] || k] = v;
+  }
+  return result;
+}
+
+app.get('/api/lookup', (req, res) => {
   const word = (req.query.word || '').trim();
   if (!word) return res.status(400).json({ error: '请输入单词' });
 
-  // 并行请求有道翻译和词典 API
-  const youdaoPromise = (async () => {
-    const salt = String(Date.now());
-    const curtime = String(Math.floor(Date.now() / 1000));
-    const input = word.length <= 20 ? word : word.slice(0, 10) + word.length + word.slice(-10);
-    const sign = crypto.createHash('sha256')
-      .update(YOUDAO_APP_KEY + input + salt + curtime + YOUDAO_SECRET)
-      .digest('hex');
-    const params = new URLSearchParams({ q: word, from: 'en', to: 'zh-CHS', appKey: YOUDAO_APP_KEY, salt, sign, signType: 'v3', curtime });
-    const resp = await fetch('https://openapi.youdao.com/api?' + params.toString());
-    return resp.json();
-  })();
-
-  const dictPromise = fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`)
-    .then(r => r.ok ? r.json() : null)
-    .catch(() => null);
-
   try {
-    const [youdao, dict] = await Promise.all([youdaoPromise, dictPromise]);
-
-    if (youdao.errorCode && youdao.errorCode !== '0') {
-      return res.status(500).json({ error: '查询失败' });
+    // 精确匹配 + 小写匹配
+    let row = dictDb.prepare('SELECT * FROM stardict WHERE word = ?').get(word);
+    if (!row) {
+      row = dictDb.prepare('SELECT * FROM stardict WHERE word = ?').get(word.toLowerCase());
+    }
+    // 尝试 sw（简化词形）
+    if (!row) {
+      row = dictDb.prepare('SELECT * FROM stardict WHERE sw = ?').get(word.toLowerCase());
     }
 
-    let phonetic = '';
-    let speaksUrl = youdao.speakUrl || '';
-    let definitions = [];
-
-    if (dict && dict[0]) {
-      const entry = dict[0];
-      phonetic = entry.phonetic || (entry.phonetics?.find(p => p.text)?.text) || '';
-      speaksUrl = speaksUrl || entry.phonetics?.find(p => p.audio)?.audio || '';
-      definitions = (entry.meanings || []).flatMap(m =>
-        m.definitions.slice(0, 2).map(d => ({
-          pos: m.partOfSpeech,
-          def: d.definition,
-          example: d.example || '',
-        }))
-      );
+    if (!row) {
+      return res.json({
+        word,
+        phonetic: '',
+        translation: '',
+        groups: [],
+        exchange: {},
+        notFound: true,
+      });
     }
+
+    const groups = parseTranslation(row.translation);
+    const exchange = parseExchange(row.exchange);
+    const freq = row.collins || 0; // 柯林斯星级 1-5
 
     res.json({
-      word,
-      phonetic,
-      translation: youdao.translation?.[0] || '',
-      definitions,
-      speaksUrl,
+      word: row.word,
+      phonetic: (row.phonetic || '').replace(/^'|'$/g, ''),
+      translation: row.translation,
+      definition: row.definition || '',
+      groups,
+      exchange,
+      freq,
+      tag: row.tag || '',
+      detail: row.detail || '',
+      audio: row.audio || '',
     });
-  } catch {
-    res.status(500).json({ error: '网络错误' });
+  } catch (err) {
+    console.error('lookup error:', err);
+    res.status(500).json({ error: '查询失败' });
   }
 });
 app.get('/api/wordbook', auth, (req, res) => {

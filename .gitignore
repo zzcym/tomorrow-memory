@@ -11,3 +11,6 @@ node_modules/
 ecdict*
 *.zip
 tmenglish.conf
+stardict.db
+ecdict*.zip
+*.eudic
