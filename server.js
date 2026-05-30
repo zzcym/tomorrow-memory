@@ -176,35 +176,54 @@ function parseExchange(ex) {
   return result;
 }
 
-app.get('/api/lookup', (req, res) => {
+app.get('/api/lookup', async (req, res) => {
   const word = (req.query.word || '').trim();
   if (!word) return res.status(400).json({ error: '请输入单词' });
 
   try {
-    // 精确匹配 + 小写匹配
+    // 1. 查 ECDICT 离线词典
     let row = dictDb.prepare('SELECT * FROM stardict WHERE word = ?').get(word);
     if (!row) {
       row = dictDb.prepare('SELECT * FROM stardict WHERE word = ?').get(word.toLowerCase());
     }
-    // 尝试 sw（简化词形）
     if (!row) {
       row = dictDb.prepare('SELECT * FROM stardict WHERE sw = ?').get(word.toLowerCase());
     }
 
+    // 2. 获取英文例句（dictionaryapi.dev）
+    let examples = [];
+    try {
+      const dictResp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+      if (dictResp.ok) {
+        const dictData = await dictResp.json();
+        if (dictData && dictData[0]) {
+          const entry = dictData[0];
+          examples = (entry.meanings || []).flatMap(m =>
+            m.definitions.filter(d => d.example).map(d => ({
+              pos: m.partOfSpeech,
+              en: d.example,
+            }))
+          ).slice(0, 6);
+        }
+      }
+    } catch {}
+
     if (!row) {
+      const hasDictApiData = examples.length > 0;
       return res.json({
         word,
         phonetic: '',
         translation: '',
         groups: [],
         exchange: {},
-        notFound: true,
+        examples,
+        notFound: !hasDictApiData,
       });
     }
 
     const groups = parseTranslation(row.translation);
     const exchange = parseExchange(row.exchange);
-    const freq = row.collins || 0; // 柯林斯星级 1-5
+    const freq = row.collins || 0;
 
     res.json({
       word: row.word,
@@ -213,6 +232,7 @@ app.get('/api/lookup', (req, res) => {
       definition: row.definition || '',
       groups,
       exchange,
+      examples,
       freq,
       tag: row.tag || '',
       detail: row.detail || '',

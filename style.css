@@ -470,6 +470,37 @@ body {
   margin-left: 8px;
 }
 
+/* 例句 */
+.examples-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.examples-title {
+  font-size: 0.8rem;
+  color: #999;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.example-item {
+  font-size: 0.9rem;
+  color: #666;
+  line-height: 1.6;
+  padding: 3px 0;
+}
+
+.example-pos {
+  display: inline-block;
+  background: #f0f0f5;
+  color: #888;
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 6px;
+  margin-right: 6px;
+}
+
 .error-card {
   background: #fff;
   border-radius: 16px;

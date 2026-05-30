@@ -250,10 +250,19 @@ function loginSuccess(token, phone, silent) {
   localStorage.setItem('authToken', token);
   updateLoginUI(phone);
 
-  loadFromServer().then(data => {
-    wordbookData = data;
+  // 合并本地单词到服务器
+  const localWords = loadWordbookLocal();
+  loadFromServer().then(serverData => {
+    // 把本地独有的单词合并到服务器数据中
+    const serverWords = new Set(serverData.map(w => w.word));
+    const newWords = localWords.filter(w => !serverWords.has(w.word));
+    if (newWords.length > 0) {
+      wordbookData = [...newWords, ...serverData];
+    } else {
+      wordbookData = serverData;
+    }
   }).catch(() => {
-    wordbookData = loadWordbookLocal();
+    wordbookData = localWords;
   }).finally(() => {
     saveWordbook();
     renderWordbook();
@@ -415,6 +424,18 @@ function renderWord(data) {
     starsHTML = '<span class="freq-stars">' + '★'.repeat(Math.min(freq, 5)) + '</span>';
   }
 
+  // 例句
+  let examplesHTML = '';
+  const examples = data.examples || [];
+  if (examples.length > 0) {
+    examplesHTML = '<div class="examples-section"><div class="examples-title">例句</div>' +
+      examples.map(e => `
+        <div class="example-item">
+          <span class="example-pos">${e.pos}</span> "${e.en}"
+        </div>`).join('') +
+      '</div>';
+  }
+
   resultArea.innerHTML = `
     <div class="word-card">
       <div class="word-head">
@@ -427,6 +448,7 @@ function renderWord(data) {
       ${tagHTML}
       ${exchangeHTML}
       ${meaningsHTML}
+      ${examplesHTML}
     </div>`;
 }
 
