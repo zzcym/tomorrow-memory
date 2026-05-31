@@ -431,7 +431,8 @@ function renderWord(data) {
     examplesHTML = '<div class="examples-section"><div class="examples-title">例句</div>' +
       examples.map(e => `
         <div class="example-item">
-          <span class="example-pos">${e.pos}</span> "${e.en}"
+          <div class="example-en">${e.en}</div>
+          ${e.zh ? `<div class="example-zh">${e.zh}</div>` : ''}
         </div>`).join('') +
       '</div>';
   }

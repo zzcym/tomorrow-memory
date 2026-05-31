@@ -146,6 +146,31 @@ app.post('/api/login', (req, res) => {
 // ===== 离线词典（ECDICT SQLite） =====
 const dictDb = new Database(path.join(__dirname, 'stardict.db'), { readonly: true });
 
+// ===== 双语例句库 =====
+let examplesDb = null;
+const examplesDbPath = path.join(__dirname, 'examples.db');
+if (require('fs').existsSync(examplesDbPath)) {
+  examplesDb = new Database(examplesDbPath, { readonly: true });
+}
+
+function queryExamples(word) {
+  if (!examplesDb) return [];
+  try {
+    // FTS5 搜索，匹配包含该单词的英文例句
+    const clean = word.replace(/[^a-zA-Z]/g, '').toLowerCase();
+    if (!clean || clean.length < 2) return [];
+    const rows = examplesDb.prepare(`
+      SELECT p.en, p.zh FROM pairs_fts f
+      JOIN pairs p ON p.id = f.rowid
+      WHERE pairs_fts MATCH ?
+      LIMIT 8
+    `).all(`"${clean}"`);
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 function parseTranslation(trans) {
   // 解析 "n. 冲突, 矛盾\nvi. 争执, 抵触\n[计] 冲突" 格式
   if (!trans) return [];
@@ -190,23 +215,9 @@ app.get('/api/lookup', async (req, res) => {
       row = dictDb.prepare('SELECT * FROM stardict WHERE sw = ?').get(word.toLowerCase());
     }
 
-    // 2. 获取英文例句（dictionaryapi.dev）
-    let examples = [];
-    try {
-      const dictResp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-      if (dictResp.ok) {
-        const dictData = await dictResp.json();
-        if (dictData && dictData[0]) {
-          const entry = dictData[0];
-          examples = (entry.meanings || []).flatMap(m =>
-            m.definitions.filter(d => d.example).map(d => ({
-              pos: m.partOfSpeech,
-              en: d.example,
-            }))
-          ).slice(0, 6);
-        }
-      }
-    } catch {}
+    // 2. 从本地例句库查询双语例句
+    const exampleRows = queryExamples(word);
+    const examples = exampleRows.map(r => ({ en: r.en, zh: r.zh }));
 
     if (!row) {
       const hasDictApiData = examples.length > 0;
