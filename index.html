@@ -3,13 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>背单词</title>
+  <title>明日记忆</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="container">
-    <!-- 右上角登录按钮 -->
-    <button id="btnLogin" class="login-btn">登录</button>
+    <!-- 右上角按钮 -->
+    <div class="top-btns">
+      <button id="btnLogin" class="login-btn">登录</button>
+      <div class="user-menu" id="userMenu" style="display:none">
+        <button class="user-menu-btn" id="userMenuBtn">
+          <span class="user-avatar">&#x1F464;</span>
+          <span class="user-phone" id="userPhone"></span>
+          <span class="user-arrow">&#x25BE;</span>
+        </button>
+        <div class="user-dropdown" id="userDropdown">
+          <a href="/profile.html" class="dropdown-item">个人主页</a>
+          <button class="dropdown-item" id="btnLogout">退出登录</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Tab 切换栏 -->
     <nav class="tab-bar">
@@ -27,7 +40,7 @@
           type="text"
           id="searchInput"
           class="search-input"
-          placeholder="输入英文单词，按回车查询..."
+          placeholder="支持中英文双向查询，输入中文或英文按回车搜索..."
           autofocus
         />
         <button id="searchBtn" class="search-btn">查询</button>
@@ -80,16 +93,42 @@
       <div class="auth-card">
         <button id="closeAuthBtn" class="close-btn auth-close">✕</button>
         <h3 class="auth-title">手机号登录</h3>
-        <p class="auth-desc">未注册的手机号将自动创建账号</p>
+        <p class="auth-desc" id="authDesc">未注册的手机号将自动创建账号</p>
         <div id="authError" class="auth-error hidden"></div>
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab active" data-tab="code">验证码登录</button>
+          <button type="button" class="auth-tab" data-tab="pwd">密码登录</button>
+        </div>
         <form id="authForm">
           <input type="tel" id="authPhone" class="auth-input" placeholder="请输入手机号" autocomplete="tel" maxlength="11" />
-          <div class="code-row">
+          <div id="codeRow" class="code-row">
             <input type="text" id="authCode" class="auth-input code-input" placeholder="验证码" autocomplete="one-time-code" maxlength="6" inputmode="numeric" />
             <button type="button" id="sendCodeBtn" class="send-code-btn">获取验证码</button>
           </div>
-          <button type="submit" id="authSubmit" class="auth-submit">登录 / 注册</button>
+          <div id="pwdRow" class="code-row" style="display:none">
+            <input type="password" id="authPassword" class="auth-input" placeholder="请输入密码" autocomplete="current-password" />
+          </div>
+          <button type="submit" id="authSubmit" class="auth-submit">登录</button>
         </form>
+      </div>
+    </div>
+
+    <!-- 打卡弹窗 -->
+    <div id="checkinModal" class="checkin-modal hidden">
+      <div class="checkin-card">
+        <h3 class="checkin-title" id="checkinTitle">今日目标已完成！</h3>
+        <p class="checkin-desc" id="checkinDesc">已学习 <strong>10</strong> 个单词</p>
+
+        <div id="checkinActions" class="checkin-actions">
+          <button id="checkinBtn" class="checkin-btn">打卡记录</button>
+          <button id="checkinClose" class="checkin-skip">继续学习</button>
+        </div>
+
+        <div id="checkinResult" class="checkin-result hidden">
+          <div class="checkin-streak-label">连续打卡</div>
+          <div class="checkin-streak" id="checkinStreak">0 天</div>
+          <button id="checkinDoneBtn" class="checkin-done-btn">继续加油</button>
+        </div>
       </div>
     </div>
   </div>

@@ -16,3 +16,8 @@ ecdict*.zip
 *.eudic
 stardict.db
 examples.db
+pg.log
+server.log
+pgdata/
+.codegraph/
+pgsql/

@@ -10,6 +10,8 @@
     "better-sqlite3": "^11.0.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "node-ssh": "^13.2.1",
+    "pg": "^8.21.0"
   }
 }

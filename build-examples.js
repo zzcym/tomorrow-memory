@@ -94,9 +94,9 @@ async function main() {
   db.pragma('synchronous = OFF');
   db.pragma('cache_size = 100000');
 
-  db.exec('CREATE TABLE pairs (id INTEGER PRIMARY KEY AUTOINCREMENT, en TEXT NOT NULL, zh TEXT NOT NULL)');
+  db.exec('CREATE TABLE pairs (id INTEGER PRIMARY KEY AUTOINCREMENT, en TEXT NOT NULL, zh TEXT NOT NULL, UNIQUE(en, zh))');
 
-  const insert = db.prepare('INSERT INTO pairs (en, zh) VALUES (?, ?)');
+  const insert = db.prepare('INSERT OR IGNORE INTO pairs (en, zh) VALUES (?, ?)');
 
   const total = pairs.length;
   let inserted = 0;

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tomorrow-memory-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tomorrow_memory
+      POSTGRES_USER: tm_user
+      POSTGRES_PASSWORD: tm_pass_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:

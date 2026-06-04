@@ -19,14 +19,27 @@ const toastMsg = document.getElementById('toastMsg');
 const toastUndo = document.getElementById('toastUndo');
 const resizeHandle = document.getElementById('wordbookResizeHandle');
 const btnLogin = document.getElementById('btnLogin');
+const userMenu = document.getElementById('userMenu');
+const userMenuBtn = document.getElementById('userMenuBtn');
+const userPhone = document.getElementById('userPhone');
+const userDropdown = document.getElementById('userDropdown');
+
+const btnLogout = document.getElementById('btnLogout');
+let authMode = 'code'; // 'code' or 'pwd'
+let hasPassword = false;
 const authModal = document.getElementById('authModal');
 const authForm = document.getElementById('authForm');
 const authPhone = document.getElementById('authPhone');
 const authCode = document.getElementById('authCode');
+const authPassword = document.getElementById('authPassword');
 const sendCodeBtn = document.getElementById('sendCodeBtn');
 const authSubmit = document.getElementById('authSubmit');
 const authError = document.getElementById('authError');
+const authDesc = document.getElementById('authDesc');
 const closeAuthBtn = document.getElementById('closeAuthBtn');
+const codeRow = document.getElementById('codeRow');
+const pwdRow = document.getElementById('pwdRow');
+const authTabs = document.querySelectorAll('.auth-tab');
 
 // ===== 状态 =====
 let wordbookData = [];
@@ -40,9 +53,21 @@ let authToken = localStorage.getItem('authToken') || '';
 let isLoggedIn = false;
 let codeTimer = null;
 let syncTimer = null;
+let lastSeenWordCount = parseInt(localStorage.getItem('lastSeenWordCount') || '0');
+let dailyGoal = 10;
+let checkedInToday = false;
+let checkinPopupShown = false;
+let sessionReviewCount = 0;
 
 const API_BASE = '';
 const translationCache = {};
+const TAG_LABELS = {
+  zk: '中考', gk: '高考',
+  cet4: '四级', cet6: '六级',
+  ky: '考研',
+  toefl: '托福', ielts: '雅思', gre: 'GRE',
+  tem4: '专四', tem8: '专八',
+};
 const MODE_LABELS = {
   sequential: '顺序背诵',
   random: '随机背诵',
@@ -61,6 +86,7 @@ initAuth().then(() => {
   updateBadge();
   buildReviewOrder();
   renderFlashcard();
+  fetchCheckinStatus();
 });
 
 // ===== Tab 切换 =====
@@ -79,8 +105,10 @@ function switchTab(tab) {
     tabLookup.classList.remove('active');
     panelReview.classList.add('active');
     panelLookup.classList.remove('active');
-    currentCardIndex = 0;
     buildReviewOrder();
+    if (currentCardIndex >= reviewOrder.length) {
+      currentCardIndex = Math.max(0, reviewOrder.length - 1);
+    }
     renderFlashcard();
   }
 }
@@ -101,17 +129,44 @@ toastUndo.addEventListener('click', handleUndo);
 resizeHandle.addEventListener('mousedown', onResizeStart);
 resizeHandle.addEventListener('touchstart', onResizeStart, { passive: false });
 
-btnLogin.addEventListener('click', () => {
-  if (isLoggedIn) {
-    logout();
-  } else {
-    showAuthModal();
-  }
+btnLogin.addEventListener('click', showAuthModal);
+
+// 用户下拉菜单
+userMenuBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  userMenu.classList.toggle('open');
+});
+btnLogout.addEventListener('click', () => {
+  userMenu.classList.remove('open');
+  logout();
+});
+document.addEventListener('click', (e) => {
+  if (!userMenu.contains(e.target)) userMenu.classList.remove('open');
 });
 closeAuthBtn.addEventListener('click', hideAuthModal);
 authModal.addEventListener('click', (e) => { if (e.target === authModal) hideAuthModal(); });
 authForm.addEventListener('submit', handleAuth);
 sendCodeBtn.addEventListener('click', sendCode);
+
+// 登录方式切换
+authTabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    authTabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    authMode = tab.dataset.tab;
+    authError.classList.add('hidden');
+    if (authMode === 'pwd') {
+      codeRow.style.display = 'none';
+      pwdRow.style.display = 'flex';
+      authDesc.textContent = '';
+    } else {
+      codeRow.style.display = 'flex';
+      pwdRow.style.display = 'none';
+      authDesc.textContent = '未注册的手机号将自动创建账号';
+    }
+  });
+});
+
 
 document.addEventListener('keydown', onKeyboard);
 
@@ -120,9 +175,16 @@ function showAuthModal() {
   authModal.classList.remove('hidden');
   authPhone.value = '';
   authCode.value = '';
+  authPassword.value = '';
   authError.classList.add('hidden');
   authSubmit.disabled = false;
-  authSubmit.textContent = '登录 / 注册';
+  authSubmit.textContent = '登录';
+  authMode = 'code';
+  authTabs.forEach(t => t.classList.remove('active'));
+  authTabs[0].classList.add('active');
+  codeRow.style.display = 'flex';
+  pwdRow.style.display = 'none';
+  authDesc.textContent = '未注册的手机号将自动创建账号';
   resetCodeBtn();
   authPhone.focus();
 }
@@ -182,9 +244,8 @@ function resetCodeBtn() {
 async function handleAuth(e) {
   e.preventDefault();
   const phone = authPhone.value.trim();
-  const code = authCode.value.trim();
-  if (!phone || !code) {
-    authError.textContent = '请输入手机号和验证码';
+  if (!phone) {
+    authError.textContent = '请输入手机号';
     authError.classList.remove('hidden');
     return;
   }
@@ -192,6 +253,25 @@ async function handleAuth(e) {
     authError.textContent = '手机号格式不正确';
     authError.classList.remove('hidden');
     return;
+  }
+
+  const body = { phone };
+  if (authMode === 'pwd') {
+    const pwd = authPassword.value.trim();
+    if (!pwd) {
+      authError.textContent = '请输入密码';
+      authError.classList.remove('hidden');
+      return;
+    }
+    body.password = pwd;
+  } else {
+    const code = authCode.value.trim();
+    if (!code) {
+      authError.textContent = '请输入验证码';
+      authError.classList.remove('hidden');
+      return;
+    }
+    body.code = code;
   }
 
   authError.classList.add('hidden');
@@ -202,23 +282,23 @@ async function handleAuth(e) {
     const resp = await fetch(API_BASE + '/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, code }),
+      body: JSON.stringify(body),
     });
     const data = await resp.json();
     if (!resp.ok) {
       authError.textContent = data.error || '登录失败';
       authError.classList.remove('hidden');
       authSubmit.disabled = false;
-      authSubmit.textContent = '登录 / 注册';
+      authSubmit.textContent = '登录';
       return;
     }
-    loginSuccess(data.token, data.phone);
+    loginSuccess(data.token, data.phone, data.avatar, data.nickname, null, data.hasPassword);
     hideAuthModal();
   } catch {
     authError.textContent = '网络错误，请确保服务已启动';
     authError.classList.remove('hidden');
     authSubmit.disabled = false;
-    authSubmit.textContent = '登录 / 注册';
+    authSubmit.textContent = '登录';
   }
 }
 
@@ -235,7 +315,7 @@ async function initAuth() {
     });
     if (resp.ok) {
       const data = await resp.json();
-      loginSuccess(token, data.phone, true);
+      loginSuccess(token, data.phone, data.avatar, data.nickname, true, data.hasPassword);
       return;
     }
   } catch {}
@@ -244,11 +324,12 @@ async function initAuth() {
   wordbookData = loadWordbookLocal();
 }
 
-function loginSuccess(token, phone, silent) {
+function loginSuccess(token, phone, avatar, nickname, silent, hasPwd) {
   authToken = token;
   isLoggedIn = true;
   localStorage.setItem('authToken', token);
-  updateLoginUI(phone);
+  if (hasPwd !== undefined) hasPassword = hasPwd;
+  updateLoginUI(phone, avatar, nickname);
 
   // 合并本地单词到服务器
   const localWords = loadWordbookLocal();
@@ -285,16 +366,22 @@ function logout() {
   if (panelReview.classList.contains('active')) renderFlashcard();
 }
 
-function updateLoginUI(phone) {
+function updateLoginUI(phone, avatar, nickname) {
   if (phone) {
-    const show = phone.slice(-4);
-    btnLogin.textContent = show;
-    btnLogin.title = phone + '（点击退出）';
-    btnLogin.classList.add('logged-in');
+    btnLogin.style.display = 'none';
+    userMenu.style.display = 'block';
+    // Avatar
+    const avatarEl = userMenuBtn.querySelector('.user-avatar');
+    if (avatar) {
+      avatarEl.innerHTML = '<img src="' + avatar + '" style="width:22px;height:22px;border-radius:50%;object-fit:cover;vertical-align:middle">';
+    } else {
+      avatarEl.textContent = '\u{1F464}';
+    }
+    // Display text: nickname if set, else phone last 4
+    userPhone.textContent = nickname || phone.slice(-4);
   } else {
-    btnLogin.textContent = '登录';
-    btnLogin.title = '登录';
-    btnLogin.classList.remove('logged-in');
+    btnLogin.style.display = '';
+    userMenu.style.display = 'none';
   }
 }
 
@@ -340,19 +427,27 @@ async function lookupWord() {
   showResult({ loading: true });
 
   try {
-    const resp = await fetch(API_BASE + '/api/lookup?word=' + encodeURIComponent(word));
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      throw new Error(data.error || 'not_found');
-    }
+    const resp = await fetch(API_BASE + '/api/lookup?word=' + encodeURIComponent(word) + '&direction=auto');
     const data = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(data.error || '查询失败');
+    }
+
+    // 混合输入返回 200 但带有 error
+    if (data.error && data.sourceLang === 'mixed') {
+      showResult({ customError: data.error });
+      return;
+    }
+
     renderWord(data);
     autoAddToWordbook(data);
   } catch (err) {
-    if (err.message === 'not_found') {
+    const msg = err.message;
+    if (msg.includes('未找到')) {
       showResult({ error: true, word });
     } else {
-      showResult({ networkError: true });
+      showResult({ customError: msg });
     }
   }
 }
@@ -367,16 +462,50 @@ function showResult(state) {
         <p style="font-weight:600;font-size:1.1rem;">未找到单词 "${state.word}"</p>
         <p style="color:#999;margin-top:6px;">请检查拼写后重试</p>
       </div>`;
-  } else if (state.networkError) {
+  } else if (state.customError) {
     resultArea.innerHTML = `
       <div class="error-card">
-        <p style="font-weight:600;">网络错误</p>
-        <p style="color:#999;margin-top:6px;">请检查网络连接后重试</p>
+        <p style="font-weight:600;font-size:1.1rem;">${state.customError}</p>
       </div>`;
   }
 }
 
 function renderWord(data) {
+  // 中译英
+  if (data.sourceLang === 'zh') {
+    const results = data.results || [];
+    let resultsHTML = '';
+    results.forEach(r => {
+      const posLabel = r.pos ? `<span class="part-of-speech">${r.pos}</span>` : '';
+      resultsHTML += `
+        <div class="meaning-section">
+          ${posLabel}
+          <span class="zh-meaning">${escapeHTML(r.word)}</span>
+          ${r.phonetic ? `<span class="word-phonetic" style="font-size:0.85rem;color:#888;">/${escapeHTML(r.phonetic)}/</span>` : ''}
+          <div style="font-size:0.8rem;color:#999;margin-top:4px;">← ${escapeHTML(r.definition)}</div>
+        </div>`;
+      if (r.synonyms && r.synonyms.length > 0) {
+        resultsHTML += `<div class="exchange-row">近义词: ${r.synonyms.map(s => escapeHTML(s)).join(', ')}</div>`;
+      }
+      if (r.examples && r.examples.length > 0) {
+        resultsHTML += '<div class="examples-section"><div class="examples-title">例句</div>' +
+          r.examples.map(e => `<div class="example-item"><div class="example-en">${escapeHTML(e)}</div></div>`).join('') +
+          '</div>';
+      }
+    });
+    resultArea.innerHTML = `
+      <div class="word-card">
+        <div class="word-head">
+          <div>
+            <span class="word-spelling">${escapeHTML(data.query)}</span>
+            <span style="font-size:0.8rem;color:#888;margin-left:8px;">→ 英文</span>
+          </div>
+        </div>
+        ${resultsHTML}
+      </div>`;
+    return;
+  }
+
   const word = data.word;
   const phonetic = data.phonetic || '';
   const tag = data.tag || '';
@@ -415,7 +544,10 @@ function renderWord(data) {
   let tagHTML = '';
   if (tag) {
     const tags = tag.split(' ').filter(t => t);
-    tagHTML = '<div class="tag-row">' + tags.map(t => `<span class="tag-item">${t.toUpperCase()}</span>`).join('') + '</div>';
+    tagHTML = '<div class="tag-row">' + tags.map(t => {
+      const label = TAG_LABELS[t] || t.toUpperCase();
+      return `<span class="tag-item tag-${t}">${label}</span>`;
+    }).join('') + '</div>';
   }
 
   // 星级
@@ -460,18 +592,31 @@ function playAudio(src) {
 
 // ===== 单词本操作 =====
 function autoAddToWordbook(data) {
-  const word = data.word;
-  const phonetic = data.phonetic || '';
-  const zh = data.translation || '';
-  const groups = data.groups || [];
-  const exchange = data.exchange || {};
-  const tag = data.tag || '';
+  if (data.sourceLang === 'zh') return;
+  let word, phonetic, meaning, groups, exchange, tag;
+
+  if (data.sourceLang === 'zh') {
+    word = data.query;
+    const r = data.results && data.results[0];
+    phonetic = (r && r.phonetic) || '';
+    meaning = (r && r.word) || '';
+    groups = [];
+    exchange = {};
+    tag = '';
+  } else {
+    word = data.word;
+    phonetic = data.phonetic || '';
+    meaning = data.translation || '';
+    groups = data.groups || [];
+    exchange = data.exchange || {};
+    tag = data.tag || '';
+  }
 
   if (wordbookData.some(w => w.word === word)) {
     return;
   }
 
-  wordbookData.unshift({ word, phonetic, meaning: zh, groups, exchange, tag, lastReviewTime: null });
+  wordbookData.unshift({ word, phonetic, meaning, groups, exchange, tag, lastReviewTime: null });
   saveWordbook();
   renderWordbook();
   updateBadge();
@@ -482,6 +627,8 @@ function autoAddToWordbook(data) {
 function removeWord(word, e) {
   if (e) e.stopPropagation();
   wordbookData = wordbookData.filter(w => w.word !== word);
+  lastSeenWordCount = Math.min(lastSeenWordCount, wordbookData.length);
+  localStorage.setItem('lastSeenWordCount', lastSeenWordCount);
   saveWordbook();
   renderWordbook();
   updateBadge();
@@ -497,6 +644,8 @@ function removeWord(word, e) {
 function handleUndo() {
   if (undoWord) {
     wordbookData = wordbookData.filter(w => w.word !== undoWord);
+    lastSeenWordCount = Math.min(lastSeenWordCount, wordbookData.length);
+  localStorage.setItem('lastSeenWordCount', lastSeenWordCount);
     saveWordbook();
     renderWordbook();
     updateBadge();
@@ -510,6 +659,8 @@ function clearAll() {
   if (wordbookData.length === 0) return;
   if (!confirm('确定要清空所有单词吗？')) return;
   wordbookData = [];
+  lastSeenWordCount = 0;
+  localStorage.setItem('lastSeenWordCount', '0');
   saveWordbook();
   renderWordbook();
   updateBadge();
@@ -552,7 +703,90 @@ function markReviewed(cardIdx) {
   if (realIdx != null && wordbookData[realIdx]) {
     wordbookData[realIdx].lastReviewTime = Date.now();
     saveWordbook();
+    sessionReviewCount++;
+    checkDailyGoalProgress();
   }
+}
+
+// ===== 打卡功能 =====
+function getDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function getTodayCount() {
+  return sessionReviewCount;
+}
+
+function checkDailyGoalProgress() {
+  if (!isLoggedIn || checkedInToday || checkinPopupShown) return;
+  const todayCount = getTodayCount();
+  if (todayCount >= dailyGoal) {
+    checkinPopupShown = true;
+    showCheckinModal(todayCount);
+  }
+}
+
+function showCheckinModal(count) {
+  const modal = document.getElementById('checkinModal');
+  const title = document.getElementById('checkinTitle');
+  const desc = document.getElementById('checkinDesc');
+  const checkinActions = document.getElementById('checkinActions');
+  const checkinResult = document.getElementById('checkinResult');
+  const btnCheckin = document.getElementById('checkinBtn');
+  const btnClose = document.getElementById('checkinClose');
+  const btnDone = document.getElementById('checkinDoneBtn');
+
+  checkinResult.classList.add('hidden');
+  checkinActions.classList.remove('hidden');
+  title.textContent = '今日目标已完成！';
+  desc.innerHTML = '已学习 <strong>' + count + '</strong> / ' + dailyGoal + ' 个单词';
+  modal.classList.remove('hidden');
+
+  btnCheckin.onclick = handleCheckin;
+  btnCheckin.disabled = false;
+  btnCheckin.textContent = '打卡记录';
+  btnClose.onclick = () => { modal.classList.add('hidden'); };
+  btnDone.onclick = () => { modal.classList.add('hidden'); };
+}
+
+async function handleCheckin() {
+  const btnCheckin = document.getElementById('checkinBtn');
+  btnCheckin.disabled = true;
+  btnCheckin.textContent = '记录中...';
+
+  try {
+    const resp = await fetch(API_BASE + '/api/checkin', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + authToken },
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      checkedInToday = true;
+      document.getElementById('checkinTitle').textContent = '打卡成功！';
+      document.getElementById('checkinDesc').innerHTML = '今日已学习 <strong>' + getTodayCount() + '</strong> 个单词';
+      document.getElementById('checkinStreak').textContent = data.streak + ' 天';
+      document.getElementById('checkinActions').classList.add('hidden');
+      document.getElementById('checkinResult').classList.remove('hidden');
+    }
+  } catch {
+    btnCheckin.disabled = false;
+    btnCheckin.textContent = '打卡记录';
+  }
+}
+
+async function fetchCheckinStatus() {
+  if (!isLoggedIn) return;
+  try {
+    const resp = await fetch(API_BASE + '/api/checkin/status', {
+      headers: { Authorization: 'Bearer ' + authToken },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      dailyGoal = data.dailyGoal;
+      checkedInToday = data.checkedIn;
+      checkinPopupShown = false;
+    }
+  } catch {}
 }
 
 // ===== Toast =====
@@ -572,6 +806,9 @@ function hideToast() {
 
 // ===== 单词本侧边栏 UI =====
 function openWordbook() {
+  lastSeenWordCount = wordbookData.length;
+  localStorage.setItem('lastSeenWordCount', lastSeenWordCount);
+  updateBadge();
   wordbook.classList.add('open');
   overlay.classList.remove('hidden');
 }
@@ -602,7 +839,9 @@ function renderWordbook() {
 }
 
 function updateBadge() {
-  wordCount.textContent = wordbookData.length;
+  const unseen = Math.max(0, wordbookData.length - lastSeenWordCount);
+  wordCount.textContent = unseen;
+  wordCount.style.display = unseen > 0 ? 'flex' : 'none';
 }
 
 function escapeHTML(str) {

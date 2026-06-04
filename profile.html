@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人主页 - 明日记忆</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+    }
+    .container { max-width: 600px; margin: 0 auto; padding: 30px 20px; }
+
+    .back-link {
+      color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.9rem;
+      display: inline-block; margin-bottom: 20px; transition: color 0.15s;
+    }
+    .back-link:hover { color: #fff; }
+
+    /* 头像区 */
+    .profile-header {
+      display: flex; flex-direction: column; align-items: center; margin-bottom: 24px;
+    }
+    .avatar-wrap {
+      position: relative; width: 96px; height: 96px; border-radius: 50%;
+      overflow: hidden; cursor: pointer; margin-bottom: 12px;
+      border: 3px solid rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.15);
+      transition: border-color 0.15s;
+    }
+    .avatar-wrap:hover { border-color: rgba(255,255,255,0.8); }
+    .avatar-wrap img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .avatar-placeholder {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+      font-size: 2.4rem; color: rgba(255,255,255,0.6);
+    }
+    .avatar-edit-hint {
+      position: absolute; bottom: 0; left: 0; right: 0; text-align: center;
+      background: rgba(0,0,0,0.4); color: #fff; font-size: 0.7rem;
+      padding: 4px 0; opacity: 0; transition: opacity 0.15s;
+    }
+    .avatar-wrap:hover .avatar-edit-hint { opacity: 1; }
+
+    .nickname-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+    }
+    .nickname-text {
+      font-size: 1.4rem; font-weight: 700; color: #fff; cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .nickname-text:hover { opacity: 0.7; }
+    .nickname-edit-icon {
+      color: rgba(255,255,255,0.5); font-size: 0.9rem; cursor: pointer;
+      transition: color 0.15s;
+    }
+    .nickname-edit-icon:hover { color: #fff; }
+    .nickname-input {
+      font-size: 1.4rem; font-weight: 700; border: none; border-bottom: 2px solid rgba(255,255,255,0.5);
+      background: transparent; color: #fff; outline: none; text-align: center;
+      width: 200px; padding: 2px 0;
+    }
+    .phone-display { color: rgba(255,255,255,0.55); font-size: 0.85rem; }
+
+    /* 统计卡片 */
+    .stats-row { display: flex; gap: 12px; margin-bottom: 28px; }
+    .stat-card {
+      flex: 1; background: rgba(255,255,255,0.12);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-radius: 14px; padding: 16px; text-align: center;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .stat-card .stat-num { font-size: 2rem; font-weight: 800; color: #fff; }
+    .stat-card .stat-label { font-size: 0.8rem; color: rgba(255,255,255,0.6); margin-top: 4px; }
+
+    /* 热力图 */
+    .heatmap-card {
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-radius: 16px; padding: 20px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .heatmap-title { font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 12px; font-weight: 600; }
+    .heatmap-legend {
+      display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
+      font-size: 0.7rem; color: rgba(255,255,255,0.5);
+    }
+    .heatmap-legend .box { width: 12px; height: 12px; border-radius: 3px; }
+    .heatmap-table {
+      display: flex; gap: 0;
+    }
+    .heatmap-y-labels {
+      display: flex; flex-direction: column; gap: 3px;
+      padding-right: 6px; padding-top: 18px;
+    }
+    .heatmap-y-labels span {
+      font-size: 0.6rem; color: rgba(255,255,255,0.35);
+      height: 13px; line-height: 13px; width: 14px; text-align: center;
+    }
+    .heatmap-scroll {
+      overflow-x: auto; padding-bottom: 4px;
+    }
+    .heatmap-months {
+      display: flex; margin-bottom: 4px; padding-left: 0;
+      font-size: 0.65rem; color: rgba(255,255,255,0.4);
+      white-space: nowrap;
+    }
+    .heatmap-months span { min-width: 13px; }
+    .heatmap-grid {
+      display: flex; gap: 3px;
+    }
+    .heatmap-week {
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .heatmap-cell {
+      width: 13px; height: 13px; border-radius: 3px;
+      background: rgba(255,255,255,0.28);
+      border: 1px solid rgba(255,255,255,0.2);
+      cursor: default;
+      position: relative;
+    }
+    .heatmap-cell.empty { background: transparent; border-color: transparent; }
+    .heatmap-cell:hover { outline: 1px solid rgba(255,255,255,0.5); z-index: 2; }
+    .heatmap-cell[data-tooltip]:hover::after {
+      content: attr(data-tooltip); position: absolute; bottom: 120%; left: 50%;
+      transform: translateX(-50%); background: #333; color: #fff;
+      font-size: 0.65rem; padding: 2px 8px; border-radius: 5px;
+      white-space: nowrap; pointer-events: none;
+    }
+    .heatmap-cell.l1 { background: rgba(102, 187, 106, 0.55); }
+    .heatmap-cell.l2 { background: rgba(56, 171, 61, 0.75); }
+    .heatmap-cell.l3 { background: rgba(27, 145, 33, 0.9); }
+
+    .empty-state { text-align: center; color: rgba(255,255,255,0.5); padding: 40px 0; font-size: 0.9rem; }
+
+    .hidden { display: none !important; }
+    #avatarInput { display: none; }
+
+    /* 密码设置 */
+    .pwd-card {
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-radius: 16px; padding: 18px 20px;
+      border: 1px solid rgba(255,255,255,0.15);
+      margin-top: 14px;
+    }
+    .pwd-title { font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 10px; font-weight: 600; }
+    .pwd-row { display: flex; align-items: center; justify-content: space-between; }
+    .pwd-label { font-size: 0.85rem; color: rgba(255,255,255,0.5); }
+    .pwd-btn {
+      padding: 5px 16px; border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.85); cursor: pointer;
+      font-size: 0.8rem; font-family: inherit;
+      transition: all 0.15s;
+    }
+    .pwd-btn:hover { background: rgba(255,255,255,0.25); }
+    .pwd-form { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pwd-input {
+      flex: 1; min-width: 160px;
+      padding: 7px 12px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.1); color: #fff;
+      font-size: 0.85rem; outline: none; font-family: inherit;
+    }
+    .pwd-input::placeholder { color: rgba(255,255,255,0.4); }
+    .pwd-save {
+      padding: 7px 16px; border-radius: 8px;
+      border: none; background: rgba(102,187,106,0.7);
+      color: #fff; cursor: pointer; font-size: 0.85rem; font-family: inherit;
+    }
+    .pwd-save:hover { background: rgba(102,187,106,0.9); }
+    .pwd-error { font-size: 0.75rem; color: rgba(255,150,100,0.9); width: 100%; }
+    .goal-input {
+      width: 70px; padding: 4px 8px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.1); color: #fff;
+      font-size: 1rem; text-align: center; outline: none; font-family: inherit;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back-link">&larr; 返回首页</a>
+
+    <div class="profile-header">
+      <div class="avatar-wrap" id="avatarWrap" title="点击更换头像">
+        <img id="avatarImg" src="" alt="" class="hidden">
+        <div class="avatar-placeholder" id="avatarPH">&#x1F464;</div>
+        <div class="avatar-edit-hint">更换头像</div>
+      </div>
+      <input type="file" id="avatarInput" accept="image/*">
+
+      <div class="nickname-row">
+        <span class="nickname-text" id="nicknameText" title="点击编辑昵称">点击设置昵称</span>
+        <span class="nickname-edit-icon" id="nicknameEdit" title="编辑昵称">&#x270E;</span>
+      </div>
+      <div class="phone-display" id="phoneDisplay"></div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-num" id="statWords">0</div>
+        <div class="stat-label">总单词数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statDays">0</div>
+        <div class="stat-label">背诵天数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statStreak">0</div>
+        <div class="stat-label">当前连续</div>
+      </div>
+    </div>
+
+    <div class="heatmap-card">
+      <div class="heatmap-title">背诵热力图（近一年）</div>
+      <div class="heatmap-legend">
+        <span>少</span>
+        <span class="box" style="background:rgba(255,255,255,0.08)"></span>
+        <span class="box" style="background:rgba(102,187,106,0.55)"></span>
+        <span class="box" style="background:rgba(56,171,61,0.75)"></span>
+        <span class="box" style="background:rgba(27,145,33,0.9)"></span>
+        <span>多</span>
+      </div>
+      <div class="heatmap-table">
+        <div class="heatmap-y-labels">
+          <span>一</span><span></span><span>三</span><span></span><span>五</span><span></span><span>日</span>
+        </div>
+        <div class="heatmap-scroll">
+          <div class="heatmap-months" id="heatmapMonths"></div>
+          <div class="heatmap-grid" id="heatmapGrid"><span style="color:rgba(255,255,255,0.4);font-size:0.8rem">加载中...</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pwd-card">
+      <div class="pwd-title">账号安全</div>
+      <div class="pwd-row">
+        <span class="pwd-label" id="pwdStatus">未设置密码</span>
+        <button class="pwd-btn" id="btnSetPwd2">设置密码</button>
+      </div>
+      <div class="pwd-form" id="pwdForm" style="display:none">
+        <input type="password" id="pwdInput" class="pwd-input" placeholder="输入新密码（至少4位）" maxlength="20" />
+        <button class="pwd-save" id="btnPwdSave">保存</button>
+        <span class="pwd-error" id="pwdError"></span>
+      </div>
+    </div>
+
+    <div class="pwd-card">
+      <div class="pwd-title">每日打卡目标</div>
+      <div class="pwd-row" style="flex-wrap:wrap;gap:8px;">
+        <div>
+          <span class="pwd-label">每日背诵 </span>
+          <input type="number" id="goalInput" class="goal-input" min="1" max="200" value="10" />
+          <span class="pwd-label"> 个单词算打卡成功</span>
+        </div>
+        <button class="pwd-btn" id="btnSaveGoal">保存</button>
+      </div>
+      <div class="pwd-error" id="goalError" style="margin-top:6px"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+    const token = localStorage.getItem('authToken');
+    if (!token) { location.href = '/'; }
+
+    const avatarWrap = document.getElementById('avatarWrap');
+    const avatarImg = document.getElementById('avatarImg');
+    const avatarPH = document.getElementById('avatarPH');
+    const avatarInput = document.getElementById('avatarInput');
+    const nicknameText = document.getElementById('nicknameText');
+    const nicknameEdit = document.getElementById('nicknameEdit');
+    const phoneDisplay = document.getElementById('phoneDisplay');
+    const heatmapGrid = document.getElementById('heatmapGrid');
+    const heatmapMonths = document.getElementById('heatmapMonths');
+
+    let profileData = {};
+    let reviewDateCounts = {};
+
+    // Load profile
+    async function loadProfile() {
+      try {
+        const resp = await fetch(API + '/api/profile', { headers: { Authorization: 'Bearer ' + token } });
+        if (resp.status === 401) {
+          localStorage.removeItem('authToken');
+          location.href = '/';
+          return;
+        }
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        profileData = data;
+        renderProfile(data);
+        if (data.daily_goal) document.getElementById('goalInput').value = data.daily_goal;
+        if ((data.reviewDates || []).length === 0) {
+          heatmapGrid.innerHTML = '<div class="empty-state">还没有打卡记录，背单词时会自动打卡</div>';
+          heatmapMonths.innerHTML = '';
+        } else {
+          renderHeatmap(data.reviewDates);
+        }
+        document.getElementById('statWords').textContent = data.totalWords || 0;
+        document.getElementById('statDays').textContent = data.reviewDays || 0;
+        computeStreak(data.reviewDates || []);
+        const meResp = await fetch(API + '/api/me', { headers: { Authorization: 'Bearer ' + token } });
+        if (meResp.ok) {
+          const me = await meResp.json();
+          phoneDisplay.textContent = me.phone ? me.phone.slice(0,3) + '****' + me.phone.slice(-4) : '';
+        }
+      } catch (e) {
+        document.getElementById('heatmapGrid').innerHTML = '<span style="color:rgba(255,255,255,0.5);font-size:0.85rem">加载失败，请刷新重试</span>';
+      }
+    }
+
+    function renderProfile(data) {
+      if (data.avatar) {
+        avatarImg.src = data.avatar;
+        avatarImg.classList.remove('hidden');
+        avatarPH.classList.add('hidden');
+      }
+      if (data.nickname) {
+        nicknameText.textContent = data.nickname;
+      }
+    }
+
+    // Avatar upload
+    avatarWrap.addEventListener('click', () => avatarInput.click());
+    avatarInput.addEventListener('change', async () => {
+      const file = avatarInput.files[0];
+      if (!file) return;
+      // Resize and convert to base64
+      const dataUrl = await resizeImage(file, 200, 200);
+      avatarImg.src = dataUrl;
+      avatarImg.classList.remove('hidden');
+      avatarPH.classList.add('hidden');
+      // Save
+      await fetch(API + '/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ avatar: dataUrl }),
+      });
+    });
+
+    function resizeImage(file, w, h) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            // Cover crop
+            const min = Math.min(img.width, img.height);
+            const sx = (img.width - min) / 2;
+            const sy = (img.height - min) / 2;
+            ctx.drawImage(img, sx, sy, min, min, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Nickname editing
+    nicknameText.addEventListener('click', startEditNickname);
+    nicknameEdit.addEventListener('click', startEditNickname);
+
+    function startEditNickname() {
+      const current = nicknameText.textContent === '点击设置昵称' ? '' : nicknameText.textContent;
+      const input = document.createElement('input');
+      input.type = 'text'; input.className = 'nickname-input';
+      input.value = current; input.maxLength = 20; input.placeholder = '输入昵称';
+      nicknameText.replaceWith(input);
+      input.focus();
+      input.select();
+
+      const save = async () => {
+        const val = input.value.trim();
+        const displayVal = val || '点击设置昵称';
+        const span = document.createElement('span');
+        span.className = 'nickname-text';
+        span.textContent = displayVal;
+        span.addEventListener('click', startEditNickname);
+        input.replaceWith(span);
+        if (val) {
+          await fetch(API + '/api/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: JSON.stringify({ nickname: val }),
+          });
+        }
+      };
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { input.blur(); } });
+    }
+
+    // Heatmap - GitHub style
+    function renderHeatmap(dates) {
+      const countMap = {};
+      dates.forEach(d => { countMap[d] = (countMap[d] || 0) + 1; });
+      reviewDateCounts = countMap;
+
+      const today = new Date(); today.setHours(0,0,0,0);
+
+      // Align to Sunday as last column (GitHub style: Mon=0 ... Sun=6)
+      // Start from Monday of the week ~53 weeks ago
+      const totalWeeks = 53;
+      // Find the Monday of the first week
+      const endDate = new Date(today);
+      // Move end to next Saturday so we have full last week
+      const endDay = endDate.getDay(); // 0=Sun
+      endDate.setDate(endDate.getDate() + (6 - (endDay === 0 ? 6 : endDay - 1))); // next Saturday
+
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - (totalWeeks * 7) + 1);
+      // startDate should be a Monday
+      const startDow = startDate.getDay();
+      startDate.setDate(startDate.getDate() - (startDow === 0 ? 6 : startDow - 1)); // prev Monday
+
+      // Calculate number of weeks from start to today
+      const actualWeeks = Math.ceil((today - startDate) / (7 * 24 * 3600 * 1000)) + 1;
+
+      // Month labels: find first day of each month in the range
+      const monthMarks = [];
+      for (let i = 0; i <= actualWeeks; i++) {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + i * 7);
+        const monthKey = d.getFullYear() + '-' + (d.getMonth()+1);
+        const last = monthMarks[monthMarks.length - 1];
+        if (!last || last.key !== monthKey) {
+          monthMarks.push({ key: monthKey, week: i, label: (d.getMonth()+1) + '月' });
+        }
+      }
+
+      // Build month header (spans with appropriate gaps)
+      let monthHTML = '';
+      let prevWeek = 0;
+      monthMarks.forEach((m, idx) => {
+        const gap = m.week - prevWeek;
+        monthHTML += '<span style="margin-left:' + (gap * 16 + (idx > 0 ? 3 : 0)) + 'px">' + m.label + '</span>';
+        prevWeek = m.week;
+      });
+      heatmapMonths.innerHTML = monthHTML;
+
+      // Build grid: each week is a column, 7 cells per column
+      heatmapGrid.innerHTML = '';
+      heatmapGrid.style.display = 'flex';
+
+      for (let w = 0; w < actualWeeks; w++) {
+        const weekCol = document.createElement('div');
+        weekCol.className = 'heatmap-week';
+        for (let dow = 0; dow < 7; dow++) { // 0=Mon, 6=Sun
+          const d = new Date(startDate);
+          d.setDate(startDate.getDate() + w * 7 + dow);
+          const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+
+          if (d > today) {
+            const cell = document.createElement('div');
+            cell.className = 'heatmap-cell empty';
+            weekCol.appendChild(cell);
+            continue;
+          }
+
+          const count = countMap[key] || 0;
+          let level = '';
+          if (count >= 5) level = 'l3';
+          else if (count >= 3) level = 'l2';
+          else if (count >= 1) level = 'l1';
+
+          const cell = document.createElement('div');
+          cell.className = 'heatmap-cell' + (level ? ' ' + level : '');
+          const dateStr = (d.getMonth()+1) + '/' + d.getDate();
+          cell.setAttribute('data-tooltip', dateStr + (count ? ' ' + count + '词' : ' 未背诵'));
+          weekCol.appendChild(cell);
+        }
+        heatmapGrid.appendChild(weekCol);
+      }
+
+      // Auto-scroll to show today (rightmost column)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const scrollWrap = heatmapGrid.parentElement;
+          scrollWrap.scrollLeft = scrollWrap.scrollWidth;
+        });
+      });
+    }
+
+    function computeStreak(dates) {
+      const dateSet = new Set(dates);
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      let streak = 0;
+      const d = new Date(today);
+      while (dateSet.has(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'))) {
+        streak++;
+        d.setDate(d.getDate() - 1);
+      }
+      document.getElementById('statStreak').textContent = streak;
+    }
+
+    loadProfile();
+
+    // 密码设置
+    const btnSetPwd2 = document.getElementById('btnSetPwd2');
+    const pwdStatus = document.getElementById('pwdStatus');
+    const pwdForm = document.getElementById('pwdForm');
+    const pwdInput = document.getElementById('pwdInput');
+    const btnPwdSave = document.getElementById('btnPwdSave');
+    const pwdError = document.getElementById('pwdError');
+
+    fetch(API + '/api/me', { headers: { Authorization: 'Bearer ' + token } })
+      .then(r => r.json()).then(d => {
+        if (d.hasPassword) {
+          pwdStatus.textContent = '已设置密码';
+          btnSetPwd2.textContent = '修改密码';
+        }
+      }).catch(() => {});
+
+    btnSetPwd2.addEventListener('click', () => {
+      if (pwdForm.style.display === 'none') {
+        pwdForm.style.display = 'flex';
+        pwdInput.value = '';
+        pwdError.textContent = '';
+        pwdInput.focus();
+      } else {
+        pwdForm.style.display = 'none';
+      }
+    });
+
+    btnPwdSave.addEventListener('click', async () => {
+      const pwd = pwdInput.value.trim();
+      if (pwd.length < 4) { pwdError.textContent = '密码至少4位'; return; }
+      const resp = await fetch(API + '/api/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ password: pwd }),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        pwdStatus.textContent = '已设置密码';
+        btnSetPwd2.textContent = '修改密码';
+        pwdForm.style.display = 'none';
+        pwdError.textContent = '';
+      } else {
+        pwdError.textContent = data.error || '设置失败';
+      }
+    });
+
+    // 每日打卡目标
+    const goalInput = document.getElementById('goalInput');
+    const btnSaveGoal = document.getElementById('btnSaveGoal');
+    const goalError = document.getElementById('goalError');
+
+    btnSaveGoal.addEventListener('click', async () => {
+      const val = parseInt(goalInput.value);
+      if (isNaN(val) || val < 1) { goalError.textContent = '请输入至少 1 个单词'; return; }
+      if (val > 200) { goalError.textContent = '目标不能超过 200'; return; }
+      goalError.textContent = '';
+      try {
+        const resp = await fetch(API + '/api/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ daily_goal: val }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          btnSaveGoal.textContent = '已保存';
+          setTimeout(() => { btnSaveGoal.textContent = '保存'; }, 1500);
+        } else {
+          goalError.textContent = data.error || '保存失败';
+        }
+      } catch {
+        goalError.textContent = '网络错误';
+      }
+    });
+  </script>
+</body>
+</html>
