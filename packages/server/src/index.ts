@@ -10,6 +10,7 @@
  */
 
 import { serve } from '@hono/node-server';
+import type { Server } from 'node:http';
 import { loadConfig } from './config.js';
 import { createApp } from './app.js';
 import { createAppDB } from './db/index.js';
@@ -21,6 +22,10 @@ import { DefaultLookupService } from './services/lookup.js';
 import { scheduleBackup } from './services/backup.js';
 import type { AgentDeps } from '@tm/agent';
 import { LlmRouter } from '@tm/agent';
+
+// ===== 类型导出（供 apps/web 的 tRPC Client 使用；type-only import 无运行时副作用） =====
+export type { AppRouter } from './trpc/router.js';
+export type { TrpcContext } from './trpc/init.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -63,16 +68,20 @@ async function main(): Promise<void> {
   };
   console.log(`[AGENT] LLM ${llmRouter.hasLlm ? '已配置（DeepSeek）' : '未配置（降级启发式/规则模式）'}`);
 
-  const app = createApp({ config, db, sms, lookup, dictSources, agentDeps, llmRouter });
+  const runtime = createApp({ config, db, sms, lookup, dictSources, agentDeps, llmRouter });
 
   // 备份调度（仅 PG 驱动有意义；SQLite 模式跳过，避免无谓报错）
   if (config.dbDriver === 'pg') {
     scheduleBackup(config, config.databaseUrl);
   }
 
-  const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
+  const server = serve({ fetch: runtime.app.fetch, port: config.port }, (info) => {
     console.log(`Server running at http://localhost:${info.port}`);
   });
+  // WebSocket 升级（Phase 4 实时对话）
+  // @hono/node-server 可能返回 http2 server；node-ws 的注入按 http1 处理
+  runtime.injectWebSocket(server as unknown as Server);
+  console.log('[WS] WebSocket 已启用（/ws）');
 
   // 优雅关闭
   function gracefulShutdown(signal: string): void {

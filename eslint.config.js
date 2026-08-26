@@ -9,6 +9,8 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/build/**',
+      '**/.next/**',
+      '**/next-env.d.ts',
       '**/*.js',
       'node_modules/',
       'backups/',

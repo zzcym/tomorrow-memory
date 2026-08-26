@@ -10,7 +10,9 @@
 
 import type {
   AdminUserRow,
+  AssessmentCacheRow,
   CefrLevel,
+  ChatMessageRow,
   FsrsCardRow,
   ProfileRow,
   TutorCacheRow,
@@ -82,6 +84,25 @@ export interface TutorCacheDB {
   set(word: string, level: CefrLevel, contentJson: string, now: number): Promise<void>;
 }
 
+/** 实时对话历史域（Phase 4 使用，最多保留 20 轮） */
+export interface ChatDB {
+  addMessage(
+    userId: number,
+    threadId: string,
+    role: string,
+    content: string,
+    now: number,
+  ): Promise<void>;
+  /** 最近 N 条消息（升序） */
+  getRecentMessages(userId: number, threadId: string, limit: number): Promise<ChatMessageRow[]>;
+}
+
+/** 测评题目缓存域（Phase 4 使用，同一单词同一题型 24h 内不重复生成） */
+export interface AssessmentDB {
+  get(word: string, qtype: string): Promise<AssessmentCacheRow | null>;
+  set(word: string, qtype: string, questionJson: string, now: number): Promise<void>;
+}
+
 /** 聚合数据库对象：所有域 + 跨表事务 + 生命周期 */
 export interface AppDB {
   users: UserDB;
@@ -90,6 +111,8 @@ export interface AppDB {
   checkins: CheckinDB;
   fsrs: FsrsDB;
   tutorCache: TutorCacheDB;
+  chat: ChatDB;
+  assessment: AssessmentDB;
   /** 创建用户 + 默认 wordbook + 默认 profile（事务） */
   createUser(phone: string, now: number): Promise<number>;
   /** 初始化表结构 */
@@ -98,4 +121,13 @@ export interface AppDB {
   close(): Promise<void>;
 }
 
-export type { UserRow, ProfileRow, WordbookEntry, FsrsCardRow, TutorCacheRow, AdminUserRow };
+export type {
+  UserRow,
+  ProfileRow,
+  WordbookEntry,
+  FsrsCardRow,
+  TutorCacheRow,
+  AdminUserRow,
+  ChatMessageRow,
+  AssessmentCacheRow,
+} from '@tm/shared';

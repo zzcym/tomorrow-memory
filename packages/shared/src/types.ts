@@ -132,6 +132,25 @@ export interface TutorCacheRow {
   created_at: number;
 }
 
+/** 会话消息行（chat_messages 表） */
+export interface ChatMessageRow {
+  id: number;
+  user_id: number;
+  thread_id: string;
+  role: string;
+  content: string;
+  created_at: number;
+}
+
+/** 测评缓存行（assessment_cache 表） */
+export interface AssessmentCacheRow {
+  id: number;
+  word: string;
+  qtype: string;
+  question: string;
+  created_at: number;
+}
+
 /** Agent 意图类型 */
 export type AgentIntent = 'lookup' | 'learn' | 'review' | 'assess' | 'report';
 

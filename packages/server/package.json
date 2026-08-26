@@ -25,12 +25,18 @@
     "dotenv": "^16.4.5",
     "hono": "^4.6.9",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "@hono/trpc-server": "^0.4.2",
+    "@trpc/server": "^11.0.0",
+    "@hono/node-ws": "^1.1.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.12",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/pg": "^8.11.10"
+    "@types/pg": "^8.11.10",
+    "ws": "^8.18.0",
+    "@types/ws": "^8.5.13"
   }
 }

@@ -6,7 +6,9 @@
 import type pg from 'pg';
 import type {
   AdminUserRow,
+  AssessmentCacheRow,
   CefrLevel,
+  ChatMessageRow,
   FsrsCardRow,
   ProfileRow,
   TutorCacheRow,
@@ -14,7 +16,17 @@ import type {
   WordbookEntry,
 } from '@tm/shared';
 import { safeJsonParse } from '@tm/shared';
-import type { AppDB, CheckinDB, FsrsDB, ProfileDB, TutorCacheDB, UserDB, WordbookDB } from './types.js';
+import type {
+  AppDB,
+  AssessmentDB,
+  ChatDB,
+  CheckinDB,
+  FsrsDB,
+  ProfileDB,
+  TutorCacheDB,
+  UserDB,
+  WordbookDB,
+} from './types.js';
 
 /** 建表 DDL（幂等） */
 const DDL: string[] = [
@@ -63,8 +75,27 @@ const DDL: string[] = [
     created_at BIGINT NOT NULL,
     UNIQUE (word, level)
   )`,
+  `CREATE TABLE IF NOT EXISTS chat_messages (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    thread_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS assessment_cache (
+    id SERIAL PRIMARY KEY,
+    word TEXT NOT NULL,
+    qtype TEXT NOT NULL,
+    question TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    UNIQUE (word, qtype)
+  )`,
   `CREATE INDEX IF NOT EXISTS idx_fsrs_cards_user ON fsrs_cards (user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_tutor_cache_word ON tutor_cache (word)`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages (thread_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages (user_id, created_at)`,
 ];
 
 export class PostgresUserDB implements UserDB {
@@ -290,6 +321,67 @@ export class PostgresTutorCacheDB implements TutorCacheDB {
   }
 }
 
+export class PostgresChatDB implements ChatDB {
+  constructor(private readonly pool: pg.Pool) {}
+
+  async addMessage(
+    userId: number,
+    threadId: string,
+    role: string,
+    content: string,
+    now: number,
+  ): Promise<void> {
+    await this.pool.query(
+      'INSERT INTO chat_messages (user_id, thread_id, role, content, created_at) VALUES ($1, $2, $3, $4, $5)',
+      [userId, threadId, role, content, now],
+    );
+  }
+
+  async getRecentMessages(userId: number, threadId: string, limit: number): Promise<ChatMessageRow[]> {
+    const r = await this.pool.query(
+      `SELECT id, user_id, thread_id, role, content, created_at FROM chat_messages
+       WHERE user_id = $1 AND thread_id = $2
+       ORDER BY id DESC LIMIT $3`,
+      [userId, threadId, limit],
+    );
+    return (r.rows.reverse() as ChatMessageRow[]).map((row) => ({
+      ...row,
+      id: Number(row.id),
+      user_id: Number(row.user_id),
+      created_at: Number(row.created_at),
+    }));
+  }
+}
+
+export class PostgresAssessmentDB implements AssessmentDB {
+  constructor(private readonly pool: pg.Pool) {}
+
+  async get(word: string, qtype: string): Promise<AssessmentCacheRow | null> {
+    const r = await this.pool.query(
+      'SELECT id, word, qtype, question, created_at FROM assessment_cache WHERE word = $1 AND qtype = $2',
+      [word, qtype],
+    );
+    const row = r.rows[0];
+    return row
+      ? {
+          id: Number(row.id),
+          word: String(row.word),
+          qtype: String(row.qtype),
+          question: String(row.question),
+          created_at: Number(row.created_at),
+        }
+      : null;
+  }
+
+  async set(word: string, qtype: string, questionJson: string, now: number): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO assessment_cache (word, qtype, question, created_at) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (word, qtype) DO UPDATE SET question = EXCLUDED.question, created_at = EXCLUDED.created_at`,
+      [word, qtype, questionJson, now],
+    );
+  }
+}
+
 export class PostgresAppDB implements AppDB {
   users: UserDB;
   wordbooks: WordbookDB;
@@ -297,6 +389,8 @@ export class PostgresAppDB implements AppDB {
   checkins: CheckinDB;
   fsrs: FsrsDB;
   tutorCache: TutorCacheDB;
+  chat: ChatDB;
+  assessment: AssessmentDB;
 
   constructor(readonly pool: pg.Pool) {
     this.users = new PostgresUserDB(pool);
@@ -305,6 +399,8 @@ export class PostgresAppDB implements AppDB {
     this.checkins = new PostgresCheckinDB(pool);
     this.fsrs = new PostgresFsrsDB(pool);
     this.tutorCache = new PostgresTutorCacheDB(pool);
+    this.chat = new PostgresChatDB(pool);
+    this.assessment = new PostgresAssessmentDB(pool);
   }
 
   async createUser(phone: string, now: number): Promise<number> {

@@ -85,6 +85,13 @@ export const AgentStateAnnotation = Annotation.Root({
   error: Annotation<string | undefined>({
     reducer: (cur, next) => next ?? cur,
   }),
+  /**
+   * LangGraph interrupt 信号（HITL）。
+   * 显式声明该 channel，否则 invoke 返回的 state 会被 Annotation 过滤掉中断信息。
+   */
+  __interrupt__: Annotation<Array<{ value?: unknown; when?: string; resumable?: boolean }> | undefined>({
+    reducer: (cur, next) => next ?? cur,
+  }),
 });
 
 export type AgentState = typeof AgentStateAnnotation.State;

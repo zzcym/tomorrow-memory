@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { interrupt } from '@langchain/langgraph';
 import type { AgentIntent } from '@tm/shared';
 import type { AgentDeps } from '../deps.js';
 import type { AgentState, AgentStateUpdate } from '../state.js';
@@ -49,6 +50,14 @@ export function heuristicIntent(input: string): { intent: AgentIntent; word?: st
   if (word && text.trim() === word) return { intent: 'learn', word };
   // 默认：若有单词 → 教学；否则查词
   return { intent: word ? 'learn' : 'lookup', word };
+}
+
+/** 输入是否意图明确（含动作关键词或具体单词） */
+export function hasClearIntent(input: string): boolean {
+  const text = input.toLowerCase();
+  return /(测评|测试|考我|测验|评分|打分|复习|回顾|分析|报告|统计|进度|总结|怎么记|记忆|口诀|词根|词缀|辨析|区别|教|讲解|学习|查|翻译|意思|释义)/.test(
+    text,
+  );
 }
 
 export function makeOrchestratorNode(deps: AgentDeps, router: LlmRouter) {
@@ -100,6 +109,38 @@ export function makeOrchestratorNode(deps: AgentDeps, router: LlmRouter) {
         }
       } catch (err) {
         console.warn('[ORCHESTRATOR] LLM 意图识别失败，降级启发式:', (err as Error).message);
+      }
+    }
+
+    // Human-in-the-loop：意图完全不明确时暂停反问（需要 checkpointer，失败则降级默认意图）
+    if (!hasClearIntent(input) && !extractWord(input)) {
+      try {
+        const answer = interrupt(
+          '抱歉，我不太确定你想做什么。可以告诉我吗？（回复：查词 / 学习 / 复习 / 测评 / 分析，或直接输入一个单词）',
+        );
+        const resolved = heuristicIntent(typeof answer === 'string' ? answer : String(answer ?? ''));
+        return {
+          ...update,
+          intent: resolved.intent,
+          word: resolved.word,
+          reviewFeedback: resolved.rating ? { word: resolved.word ?? '', rating: resolved.rating } : undefined,
+        };
+      } catch (err) {
+        // LangGraph 的 interrupt 通过抛出中断信号暂停执行（0.2.x 序列化后为
+        // [{value, when, resumable, ns}] 结构）。必须原样重新抛出让图处理，
+        // 不能当作普通错误降级；用 JSON 序列化鲁棒检测中断信号。
+        let signalText = '';
+        try {
+          signalText = JSON.stringify(err) ?? '';
+        } catch {
+          signalText = String(err);
+        }
+        const isInterruptSignal =
+          signalText.includes('"resumable"') && signalText.includes('"ns"') && signalText.includes('"value"');
+        if (isInterruptSignal) {
+          throw err;
+        }
+        console.warn('[ORCHESTRATOR] interrupt 不可用（无 checkpointer），使用默认意图:', (err as Error).message);
       }
     }
 

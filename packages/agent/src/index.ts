@@ -34,4 +34,23 @@ export {
   retrievabilityPowerLaw,
   RATING_LABEL,
 } from './tools/fsrs.js';
+export {
+  generateQuestion,
+  fallbackQuestion,
+  gradeAnswer,
+  pickQuestionType,
+  scoreToFsrsRating,
+  SCORE_LABEL,
+  AssessmentQuestionSchema,
+  type AssessmentQuestion,
+  type AssessmentQuestionType,
+  type AssessmentScore,
+} from './tools/assessment.js';
+export {
+  createThreadedAgent,
+  type ThreadedAgent,
+  type ThreadedAgentStep,
+} from './threaded.js';
+// HITL 原语转发（供 server 层使用）
+export { Command, MemorySaver, interrupt } from '@langchain/langgraph';
 export type { AgentDeps, FsrsCardPort, LookupPort, TutorCachePort, WordbookPort } from './deps.js';

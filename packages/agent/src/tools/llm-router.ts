@@ -177,6 +177,33 @@ export class LlmRouter {
     this.usage.push(u);
   }
 
+  /**
+   * 流式调用 LLM：逐 chunk 产出文本增量（用于 SSE / WebSocket 打字机效果）
+   * 无 Key 时抛错，调用方应降级。
+   */
+  async *invokeStream(
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    role: LlmRole = 'fast',
+  ): AsyncGenerator<string, void, unknown> {
+    const model = this.createModel(role);
+    const langMessages: BaseMessage[] = messages.map((m) => {
+      if (m.role === 'system') return new SystemMessage(m.content);
+      if (m.role === 'user') return new HumanMessage(m.content);
+      return new AIMessage(m.content);
+    });
+    let full = '';
+    const stream = await model.stream(langMessages);
+    for await (const chunk of stream) {
+      const text = typeof chunk.content === 'string' ? chunk.content : '';
+      if (text) {
+        full += text;
+        yield text;
+      }
+    }
+    const modelName = this.modelName(role);
+    this.record({ model: modelName, inputTokens: 0, outputTokens: estimateTokens(full), ts: Date.now() });
+  }
+
   /** 累计 token 与估算成本（USD） */
   stats(): { calls: number; inputTokens: number; outputTokens: number; costUsd: number } {
     let input = 0;

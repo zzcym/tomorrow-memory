@@ -9,7 +9,7 @@
  *             └─ report → report   → END
  */
 
-import { END, START, StateGraph } from '@langchain/langgraph';
+import { END, START, StateGraph, type BaseCheckpointSaver } from '@langchain/langgraph';
 import type { AgentIntent, CefrLevel } from '@tm/shared';
 import type { AgentDeps } from './deps.js';
 import { makeOrchestratorNode } from './nodes/orchestrator.js';
@@ -32,7 +32,12 @@ function routeByIntent(state: AgentState): string {
   return ROUTE_TABLE[state.intent ?? 'lookup'];
 }
 
-export function buildAgentGraph(deps: AgentDeps, router: LlmRouter) {
+export interface AgentGraphOptions {
+  /** checkpoint saver（HITL interrupt 需要） */
+  checkpointer?: BaseCheckpointSaver;
+}
+
+export function buildAgentGraph(deps: AgentDeps, router: LlmRouter, options: AgentGraphOptions = {}) {
   const graph = new StateGraph(AgentStateAnnotation)
     .addNode('orchestrator', makeOrchestratorNode(deps, router))
     .addNode('lexicon', makeLexiconNode(deps, router))
@@ -51,7 +56,7 @@ export function buildAgentGraph(deps: AgentDeps, router: LlmRouter) {
     .addEdge('scheduler', END)
     .addEdge('report', END);
 
-  return graph.compile();
+  return options.checkpointer ? graph.compile({ checkpointer: options.checkpointer }) : graph.compile();
 }
 
 export interface AgentRunInput {

@@ -6,7 +6,9 @@
 import type Database from 'better-sqlite3';
 import type {
   AdminUserRow,
+  AssessmentCacheRow,
   CefrLevel,
+  ChatMessageRow,
   FsrsCardRow,
   ProfileRow,
   TutorCacheRow,
@@ -14,7 +16,17 @@ import type {
   WordbookEntry,
 } from '@tm/shared';
 import { computeStreak, safeJsonParse } from '@tm/shared';
-import type { AppDB, CheckinDB, FsrsDB, ProfileDB, TutorCacheDB, UserDB, WordbookDB } from './types.js';
+import type {
+  AppDB,
+  AssessmentDB,
+  ChatDB,
+  CheckinDB,
+  FsrsDB,
+  ProfileDB,
+  TutorCacheDB,
+  UserDB,
+  WordbookDB,
+} from './types.js';
 
 /** 建表 DDL（幂等） */
 const DDL: string[] = [
@@ -63,8 +75,27 @@ const DDL: string[] = [
     created_at INTEGER NOT NULL,
     UNIQUE (word, level)
   )`,
+  `CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    thread_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS assessment_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    word TEXT NOT NULL,
+    qtype TEXT NOT NULL,
+    question TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE (word, qtype)
+  )`,
   `CREATE INDEX IF NOT EXISTS idx_fsrs_cards_user ON fsrs_cards (user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_tutor_cache_word ON tutor_cache (word)`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages (thread_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages (user_id, created_at)`,
 ];
 
 /** 把更好用的行类型从 better-sqlite3 返回中归一化 */
@@ -301,6 +332,76 @@ export class SqliteTutorCacheDB implements TutorCacheDB {
   }
 }
 
+export class SqliteChatDB implements ChatDB {
+  constructor(private readonly db: Database.Database) {}
+
+  addMessage(
+    userId: number,
+    threadId: string,
+    role: string,
+    content: string,
+    now: number,
+  ): Promise<void> {
+    this.db
+      .prepare(
+        'INSERT INTO chat_messages (user_id, thread_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(userId, threadId, role, content, now);
+    return Promise.resolve();
+  }
+
+  getRecentMessages(userId: number, threadId: string, limit: number): Promise<ChatMessageRow[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT id, user_id, thread_id, role, content, created_at FROM chat_messages
+         WHERE user_id = ? AND thread_id = ?
+         ORDER BY id DESC LIMIT ?`,
+      )
+      .all(userId, threadId, limit) as SqliteRow[];
+    return Promise.resolve(
+      rows.reverse().map((r) => ({
+        id: Number(r.id),
+        user_id: Number(r.user_id),
+        thread_id: String(r.thread_id),
+        role: String(r.role),
+        content: String(r.content),
+        created_at: Number(r.created_at),
+      })),
+    );
+  }
+}
+
+export class SqliteAssessmentDB implements AssessmentDB {
+  constructor(private readonly db: Database.Database) {}
+
+  get(word: string, qtype: string): Promise<AssessmentCacheRow | null> {
+    const row = this.db
+      .prepare('SELECT id, word, qtype, question, created_at FROM assessment_cache WHERE word = ? AND qtype = ?')
+      .get(word, qtype) as SqliteRow | undefined;
+    return Promise.resolve(
+      row
+        ? {
+            id: Number(row.id),
+            word: String(row.word),
+            qtype: String(row.qtype),
+            question: String(row.question),
+            created_at: Number(row.created_at),
+          }
+        : null,
+    );
+  }
+
+  set(word: string, qtype: string, questionJson: string, now: number): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO assessment_cache (word, qtype, question, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (word, qtype) DO UPDATE SET question = excluded.question, created_at = excluded.created_at`,
+      )
+      .run(word, qtype, questionJson, now);
+    return Promise.resolve();
+  }
+}
+
 export class SqliteAppDB implements AppDB {
   users: UserDB;
   wordbooks: WordbookDB;
@@ -308,6 +409,8 @@ export class SqliteAppDB implements AppDB {
   checkins: CheckinDB;
   fsrs: FsrsDB;
   tutorCache: TutorCacheDB;
+  chat: ChatDB;
+  assessment: AssessmentDB;
 
   constructor(readonly db: Database.Database) {
     this.users = new SqliteUserDB(db);
@@ -316,6 +419,8 @@ export class SqliteAppDB implements AppDB {
     this.checkins = new SqliteCheckinDB(db);
     this.fsrs = new SqliteFsrsDB(db);
     this.tutorCache = new SqliteTutorCacheDB(db);
+    this.chat = new SqliteChatDB(db);
+    this.assessment = new SqliteAssessmentDB(db);
   }
 
   async createUser(phone: string, now: number): Promise<number> {
