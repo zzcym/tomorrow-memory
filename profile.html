@@ -339,11 +339,12 @@
       avatarImg.classList.remove('hidden');
       avatarPH.classList.add('hidden');
       // Save
-      await fetch(API + '/api/profile', {
+      const resp = await fetch(API + '/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
         body: JSON.stringify({ avatar: dataUrl }),
       });
+      if (!resp.ok) alert('头像保存失败，请重试');
     });
 
     function resizeImage(file, w, h) {
@@ -390,11 +391,12 @@
         span.addEventListener('click', startEditNickname);
         input.replaceWith(span);
         if (val) {
-          await fetch(API + '/api/profile', {
+          const resp = await fetch(API + '/api/profile', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
             body: JSON.stringify({ nickname: val }),
           });
+          if (!resp.ok) alert('昵称保存失败，请重试');
         }
       };
       input.addEventListener('blur', save);
