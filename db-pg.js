@@ -119,4 +119,4 @@ async function close() {
   await pool.end();
 }
 
-module.exports = { initTables, get, all, run, createUser, getStreak, close, pool };
+module.exports = { initTables, get, all, run, createUser, getStreak, close, pool, connectionString: DATABASE_URL };

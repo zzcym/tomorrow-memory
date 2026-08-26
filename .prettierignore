@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+backups/
+pgdata/
+pgsql/
+_archive/
+*.db
+*.db-shm
+*.db-wal
+*.zip
+*.png
+package-lock.json
+pnpm-lock.yaml

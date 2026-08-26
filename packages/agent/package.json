@@ -1,0 +1,28 @@
+{
+  "name": "@tm/agent",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build-index": "tsx src/scripts/build-vector-index.ts",
+    "test-query": "tsx src/scripts/test-lookup.ts"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.21",
+    "@langchain/langgraph": "^0.2.35",
+    "@langchain/openai": "^0.3.16",
+    "@tm/shared": "workspace:*",
+    "dotenv": "^16.4.5",
+    "ts-fsrs": "^4.1.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {}
+}

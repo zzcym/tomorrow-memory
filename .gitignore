@@ -1,23 +1,47 @@
+# dependencies
 node_modules/
+
+# build outputs
+dist/
+build/
+
+# database files
 *.db
 *.db-*
 *.db-shm
 *.db-wal
-.DS_Store
-.claude/
-*.png
-*.py
-*.sh
 ecdict*
-*.zip
-tmenglish.conf
-stardict.db
-ecdict*.zip
 *.eudic
 stardict.db
 examples.db
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
 pg.log
 server.log
+
+# archives & backups
+backups/
 pgdata/
-.codegraph/
 pgsql/
+_archive/
+
+# misc
+.DS_Store
+.claude/
+.codegraph/
+*.png
+*.py
+*.sh
+tmenglish.conf
+*.zip
+package-lock.json
+
+# IDE
+.vscode/
+.idea/

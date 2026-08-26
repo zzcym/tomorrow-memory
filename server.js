@@ -6,6 +6,7 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 
 // PostgreSQL 适配器（用户数据）
 const pg = require('./db-pg');
@@ -573,11 +574,55 @@ app.get('/api/admin/users', adminAuth, asyncHandler(async (req, res) => {
   res.json({ total, page, pageSize, users });
 }));
 
+// ===== 每日自动备份（PostgreSQL） =====
+const BACKUP_DIR = path.join(__dirname, 'backups');
+
+function findPgDump() {
+  // 优先级：环境变量 > 项目内 pgsql/bin（Windows 本地开发） > PATH
+  if (process.env.PGDUMP_BIN) return process.env.PGDUMP_BIN;
+  const localBin = path.join(__dirname, 'pgsql', 'bin', process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump');
+  if (fs.existsSync(localBin)) return localBin;
+  return process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump';
+}
+
+function backupDatabase() {
+  if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  const now = new Date();
+  const stamp = now.getFullYear() + '-' +
+    String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    String(now.getDate()).padStart(2, '0');
+  const backupPath = path.join(BACKUP_DIR, 'pg-' + stamp + '.dump');
+  execFile(findPgDump(),
+    ['--dbname=' + (process.env.DATABASE_URL || pg.connectionString), '--format=custom', '--no-password', '--file=' + backupPath],
+    (err) => {
+      if (err) {
+        if (err.code === 'ENOENT') {
+          console.error('[BACKUP] 找不到 pg_dump，跳过备份。请安装 postgresql-client 或设置 PGDUMP_BIN');
+        } else {
+          console.error('[BACKUP] 备份失败:', err.message);
+        }
+        return;
+      }
+      // 只保留最近 30 天
+      const files = fs.readdirSync(BACKUP_DIR).filter(f => /^pg-\d{4}-\d{2}-\d{2}\.dump$/.test(f)).sort();
+      while (files.length > 30) {
+        fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
+      }
+      console.log('[BACKUP] PostgreSQL 已备份到', backupPath);
+    });
+}
+
 // ===== 启动 =====
 async function start() {
   // 初始化 PostgreSQL 表
   await pg.initTables();
   console.log('[PG] PostgreSQL initialized');
+
+  // 启动 5 分钟后首次备份，之后每 24 小时一次
+  setTimeout(() => {
+    backupDatabase();
+    setInterval(backupDatabase, 24 * 60 * 60 * 1000);
+  }, 5 * 60 * 1000);
 
   const server = app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);

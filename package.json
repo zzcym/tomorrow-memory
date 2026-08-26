@@ -1,17 +1,34 @@
 {
-  "name": "vocab-server",
-  "version": "1.0.0",
+  "name": "tomorrow-memory",
+  "version": "2.0.0",
   "private": true,
-  "scripts": {
-    "start": "node server.js"
+  "description": "明日记忆 Tomorrow Memory - Multi-Agent AI 英语单词学习应用",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
   },
-  "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.0.0",
-    "cors": "^2.8.5",
-    "express": "^4.21.0",
-    "jsonwebtoken": "^9.0.2",
-    "node-ssh": "^13.2.1",
-    "pg": "^8.21.0"
-  }
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "dev:server": "pnpm --filter @tm/server dev",
+    "dev:agent": "pnpm --filter @tm/agent dev",
+    "db:migrate": "pnpm --filter @tm/server migrate",
+    "db:init-fsrs": "pnpm --filter @tm/server init-fsrs",
+    "build:index": "pnpm --filter @tm/agent build-index",
+    "docker:up": "docker compose -f docker-compose.dev.yml up -d",
+    "docker:down": "docker compose -f docker-compose.dev.yml down"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@types/node": "^22.9.0",
+    "eslint": "^9.14.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.13.0"
+  },
+  "packageManager": "pnpm@11.24.0+sha512.bd27e345e976dcb0be0b7a1228217b049a817e21b1f355c90dbe7dc46671895a8bc1e6d06c24554505ea93ea0b45f489a27ec1bfbc8de6a9659fca0f16fa0000"
 }
