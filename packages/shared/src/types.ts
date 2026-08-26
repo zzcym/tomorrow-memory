@@ -134,3 +134,51 @@ export interface TutorCacheRow {
 
 /** Agent 意图类型 */
 export type AgentIntent = 'lookup' | 'learn' | 'review' | 'assess' | 'report';
+
+/** 查词方向 */
+export type LookupDirection = 'auto' | 'en2zh' | 'zh2en';
+
+/** 英译中命中（stardict 完整结果，/api/lookup 响应格式） */
+export interface LookupEn2ZhSuccess {
+  word: string;
+  phonetic: string;
+  translation: string;
+  definition: string;
+  groups: TranslationGroup[];
+  exchange: Record<string, string>;
+  examples: ExamplePair[];
+  freq: number;
+  tag: string;
+  detail: string;
+  audio: string;
+}
+
+/** 英译中 fallback（在线 API 兜底结果） */
+export interface LookupEn2ZhFallback {
+  word: string;
+  phonetic: string;
+  translation: string;
+  groups: TranslationGroup[];
+  exchange: Record<string, string>;
+  examples: ExamplePair[];
+  notFound: boolean;
+}
+
+/** 中译英响应 */
+export interface LookupZh2EnResponse {
+  query: string;
+  sourceLang: 'zh';
+  results: Zh2EnEntry[];
+  error: string | null;
+}
+
+/** 混合语言响应 */
+export interface LookupMixedResponse {
+  query: string;
+  sourceLang: 'mixed';
+  results: [];
+  error: string;
+}
+
+/** 查词统一响应 */
+export type LookupResponse = LookupEn2ZhSuccess | LookupEn2ZhFallback | LookupZh2EnResponse | LookupMixedResponse;

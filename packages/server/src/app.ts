@@ -7,6 +7,7 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serveStatic } from '@hono/node-server/serve-static';
+import type { AgentDeps, LlmRouter } from '@tm/agent';
 import type { AppConfig } from './config.js';
 import type { AppDB } from './db/types.js';
 import type { AuthEnv } from './middleware/auth.js';
@@ -16,6 +17,9 @@ import { createProfileRouter } from './routes/profile.js';
 import { createCheckinRouter } from './routes/checkin.js';
 import { createLookupRouter } from './routes/lookup.js';
 import { createAdminRouter } from './routes/admin.js';
+import { createAgentRouter } from './routes/agent.js';
+import { createTutorRouter } from './routes/tutor.js';
+import { createReviewRouter } from './routes/review.js';
 import type { DictSources } from './services/dict-sources.js';
 import type { LookupService } from './services/lookup.js';
 import type { SmsService } from './services/sms.js';
@@ -26,10 +30,12 @@ export interface AppDeps {
   sms: SmsService;
   lookup: LookupService;
   dictSources: DictSources;
+  agentDeps: AgentDeps;
+  llmRouter: LlmRouter;
 }
 
 export function createApp(deps: AppDeps): Hono<AuthEnv> {
-  const { config, db, sms, lookup, dictSources } = deps;
+  const { config, db, sms, lookup, agentDeps, llmRouter } = deps;
   const app = new Hono<AuthEnv>();
 
   app.use('*', cors());
@@ -45,6 +51,10 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
   app.route('/', createCheckinRouter(db));
   app.route('/', createLookupRouter(lookup));
   app.route('/', createAdminRouter(db));
+  // Phase 2：Multi-Agent API（新增，不影响旧 API）
+  app.route('/', createAgentRouter(agentDeps, llmRouter, lookup, config));
+  app.route('/', createTutorRouter(agentDeps, llmRouter));
+  app.route('/', createReviewRouter(db, agentDeps, llmRouter));
 
   // ===== 静态文件（等价于 express.static(__dirname)） =====
   app.get('/admin', (c) => {
@@ -62,6 +72,5 @@ export function createApp(deps: AppDeps): Hono<AuthEnv> {
     }),
   );
 
-  void dictSources;
   return app;
 }

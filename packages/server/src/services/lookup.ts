@@ -8,44 +8,19 @@
  *  - auto mixed: { query, sourceLang: 'mixed', results: [], error: string }
  */
 
-import type { ExamplePair, TranslationGroup, Zh2EnEntry } from '@tm/shared';
+import type {
+  ExamplePair,
+  LookupDirection,
+  LookupEn2ZhFallback,
+  LookupEn2ZhSuccess,
+  LookupResponse,
+  LookupZh2EnResponse,
+  Zh2EnEntry,
+} from '@tm/shared';
 import { detectLanguage, parseExchange, parseTranslation } from '@tm/shared';
 import type { DictionaryApiClient } from './dictionaryapi.js';
 import type { DictSources, StardictRow } from './dict-sources.js';
 import type { YoudaoClient } from './youdao.js';
-
-export type LookupDirection = 'auto' | 'en2zh' | 'zh2en';
-
-export interface LookupEn2ZhSuccess {
-  word: string;
-  phonetic: string;
-  translation: string;
-  definition: string;
-  groups: TranslationGroup[];
-  exchange: Record<string, string>;
-  examples: ExamplePair[];
-  freq: number;
-  tag: string;
-  detail: string;
-  audio: string;
-}
-
-export interface LookupEn2ZhFallback {
-  word: string;
-  phonetic: string;
-  translation: string;
-  groups: TranslationGroup[];
-  exchange: Record<string, string>;
-  examples: ExamplePair[];
-  notFound: boolean;
-}
-
-export interface LookupZh2EnResponse {
-  query: string;
-  sourceLang: 'zh';
-  results: Zh2EnEntry[];
-  error: string | null;
-}
 
 export interface LookupMixedResponse {
   query: string;
@@ -54,11 +29,13 @@ export interface LookupMixedResponse {
   error: string;
 }
 
-export type LookupResponse =
-  | LookupEn2ZhSuccess
-  | LookupEn2ZhFallback
-  | LookupZh2EnResponse
-  | LookupMixedResponse;
+export type {
+  LookupDirection,
+  LookupEn2ZhSuccess,
+  LookupEn2ZhFallback,
+  LookupZh2EnResponse,
+  LookupResponse,
+};
 
 export interface LookupService {
   lookup(word: string, direction: LookupDirection): Promise<LookupResponse | null>;

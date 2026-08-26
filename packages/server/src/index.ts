@@ -19,6 +19,8 @@ import { createYoudaoClient } from './services/youdao.js';
 import { createDictionaryApiClient } from './services/dictionaryapi.js';
 import { DefaultLookupService } from './services/lookup.js';
 import { scheduleBackup } from './services/backup.js';
+import type { AgentDeps } from '@tm/agent';
+import { LlmRouter } from '@tm/agent';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -41,7 +43,27 @@ async function main(): Promise<void> {
   const lookup = new DefaultLookupService(dictSources, youdao, dictApi);
   const sms = createSmsService();
 
-  const app = createApp({ config, db, sms, lookup, dictSources });
+  // ===== Multi-Agent 编排依赖注入 =====
+  const llmRouter = new LlmRouter({
+    deepseekApiKey: config.deepseekApiKey,
+    deepseekBaseUrl: config.deepseekBaseUrl,
+    fallbackApiKey: process.env.OPENAI_API_KEY,
+    fallbackBaseUrl: process.env.OPENAI_BASE_URL,
+    fallbackModel: process.env.OPENAI_MODEL,
+  });
+  const agentDeps: AgentDeps = {
+    tutorCache: db.tutorCache,
+    fsrsCards: db.fsrs,
+    wordbook: db.wordbooks,
+    lookup,
+    getCefrLevel: async () => {
+      // TODO: 用户 CEFR 水平暂未持久化，默认 B1；Phase 3+ 可在 profiles 表增加 cefr_level 字段
+      return 'B1';
+    },
+  };
+  console.log(`[AGENT] LLM ${llmRouter.hasLlm ? '已配置（DeepSeek）' : '未配置（降级启发式/规则模式）'}`);
+
+  const app = createApp({ config, db, sms, lookup, dictSources, agentDeps, llmRouter });
 
   // 备份调度（仅 PG 驱动有意义；SQLite 模式跳过，避免无谓报错）
   if (config.dbDriver === 'pg') {
