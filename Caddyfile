@@ -1,0 +1,46 @@
+# ===== 明日记忆 Caddyfile（Phase 6：替代 Nginx） =====
+# 生产环境填入你的域名后自动申请 Let's Encrypt 证书
+# 本地测试: caddy run --config Caddyfile (自动生成本地证书)
+
+# 用环境变量 SITE_ADDRESS 注入域名（未设置则本地）
+{$SITE_ADDRESS:localhost} {
+	# 安全头
+	header {
+		# 内容安全策略（允许内联样式/脚本、数据图片、本地 API）
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:;"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(self), geolocation=()"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	# 后端 API（Hono：REST + tRPC + WebSocket）
+	handle /api/* {
+		reverse_proxy server:3001
+	}
+	handle /trpc/* {
+		reverse_proxy server:3001
+	}
+	handle /ws {
+		reverse_proxy server:3001
+	}
+	handle /metrics {
+		reverse_proxy server:3001
+	}
+
+	# 前端（Next.js standalone）
+	handle {
+		# 静态资源缓存：一年（含 hash 的文件）
+		@static path /_next/static/* /favicon.ico /robots.txt /sitemap.xml
+		header @static Cache-Control "public, max-age=31536000, immutable"
+
+		# HTML 不缓存（保证最新）
+		header / Cache-Control "no-cache"
+
+		reverse_proxy web:3000
+	}
+
+	# 压缩：gzip + brotli
+	encode zstd gzip
+}

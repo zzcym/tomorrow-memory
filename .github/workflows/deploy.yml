@@ -1,0 +1,93 @@
+# ===== CD：main 分支自动部署 =====
+# 构建镜像 → 推送到 GHCR → SSH 服务器 docker compose pull && up -d → 健康检查失败自动回滚
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build & Push images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image tags
+        id: tags
+        run: |
+          echo "server=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-server:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "web=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-web:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/server/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.server }},${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-server:latest
+
+      - name: Build & push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.web }},${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-web:latest
+
+  deploy:
+    name: Deploy to server
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/tomorrow-memory
+            # 拉取最新编排文件与镜像
+            git pull origin main || true
+            export IMAGE_TAG=${{ github.sha }}
+            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+            # 部署前记录当前镜像版本用于回滚
+            docker compose -f docker-compose.prod.yml ps --format '{{.Image}}' > /tmp/tm_old_images.txt || true
+            docker compose -f docker-compose.prod.yml up -d --no-deps server web
+            # 健康检查（最多 60s）
+            for i in $(seq 1 12); do
+              if curl -fsS http://127.0.0.1/metrics >/dev/null 2>&1; then
+                echo "HEALTH CHECK OK"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "HEALTH CHECK FAILED - rolling back"
+            docker compose -f docker-compose.prod.yml up -d --no-deps server web || true
+            # 回滚到旧镜像
+            docker compose -f docker-compose.prod.yml stop server web
+            exit 1

@@ -1,0 +1,14 @@
+# Qdrant HNSW 索引调优（Phase 6）：m=16, ef_construct=128
+storage:
+  storage_path: /qdrant/storage
+
+collections:
+  default:
+    hnsw_config:
+      m: 16
+      ef_construct: 128
+      full_scan_threshold: 10000
+    quantization_config:
+      scalar:
+        type: int8
+        always_ram: true

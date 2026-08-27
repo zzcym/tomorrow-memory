@@ -35,7 +35,8 @@
     "react-dom": "^19.0.0",
     "sonner": "^1.7.0",
     "tailwind-merge": "^2.5.4",
-    "@tm/server": "workspace:*"
+    "@tm/server": "workspace:*",
+    "recharts": "^2.13.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

@@ -30,6 +30,7 @@ import type { LookupService } from './services/lookup.js';
 import type { SmsService } from './services/sms.js';
 import type { EventCollector } from './services/events.js';
 import type { AnalystService } from './services/analyst.js';
+import type { CacheService } from './services/cache.js';
 import { metrics } from './telemetry/metrics.js';
 import { appRouter } from './trpc/router.js';
 import type { TrpcContext } from './trpc/init.js';
@@ -46,6 +47,8 @@ export interface AppDeps {
   events: EventCollector;
   /** 学情分析服务（Phase 5） */
   analyst: AnalystService;
+  /** 缓存层（Phase 6） */
+  cache: CacheService;
 }
 
 export interface AppRuntime {
@@ -59,7 +62,7 @@ const httpRequests = metrics.counter('http_requests_total', 'HTTP 请求总数')
 const httpDuration = metrics.histogram('http_request_duration_seconds', 'HTTP 请求耗时');
 
 export function createApp(deps: AppDeps): AppRuntime {
-  const { config, db, sms, lookup, agentDeps, llmRouter, events, analyst } = deps;
+  const { config, db, sms, lookup, agentDeps, llmRouter, events, analyst, cache } = deps;
   const app = new Hono<AuthEnv>();
 
   app.use('*', cors());
@@ -113,6 +116,7 @@ export function createApp(deps: AppDeps): AppRuntime {
           sms,
           events,
           analyst,
+          cache,
         } satisfies TrpcContext;
       },
     }),

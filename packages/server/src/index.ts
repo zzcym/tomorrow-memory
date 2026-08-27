@@ -22,6 +22,7 @@ import { DefaultLookupService } from './services/lookup.js';
 import { scheduleBackup } from './services/backup.js';
 import { ClickHouseClient } from './services/clickhouse.js';
 import { RedisService } from './services/redis.js';
+import { CacheService } from './services/cache.js';
 import { EventCollector } from './services/events.js';
 import { AnalystService } from './services/analyst.js';
 import { initTracing, shutdownTracing } from './telemetry/tracing.js';
@@ -68,6 +69,8 @@ async function main(): Promise<void> {
   await clickhouse.init();
   const redis = new RedisService(config.redisUrl);
   await redis.connect();
+  // Phase 6：缓存层（查词 5min / 单词本 30s）
+  const cache = new CacheService(redis);
   const events = new EventCollector(clickhouse, redis);
   await events.start();
   const analyst = new AnalystService(db, clickhouse, dictSources);
@@ -93,7 +96,7 @@ async function main(): Promise<void> {
   };
   console.log(`[AGENT] LLM ${llmRouter.hasLlm ? '已配置（DeepSeek）' : '未配置（降级启发式/规则模式）'}`);
 
-  const runtime = createApp({ config, db, sms, lookup, dictSources, agentDeps, llmRouter, events, analyst });
+  const runtime = createApp({ config, db, sms, lookup, dictSources, agentDeps, llmRouter, events, analyst, cache });
 
   // 备份调度（仅 PG 驱动有意义；SQLite 模式跳过，避免无谓报错）
   if (config.dbDriver === 'pg') {

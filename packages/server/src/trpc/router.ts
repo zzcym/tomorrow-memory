@@ -31,6 +31,7 @@ import {
   type AssessmentQuestionType,
 } from '@tm/agent';
 import type { AnalystInsight } from '@tm/shared';
+import { cacheKeys } from '../services/cache.js';
 import { loadConfig } from '../config.js';
 import { protectedProcedure, publicProcedure, router } from './init.js';
 
@@ -92,14 +93,22 @@ export const appRouter = router({
         }),
       )
       .query(async ({ ctx, input }) => {
-        return ctx.lookup.lookup(input.word.trim(), input.direction);
+        // Phase 6：查词结果缓存 5 分钟（Redis 可用时）
+        return ctx.cache.getOrSet(
+          cacheKeys.lookup(input.word.trim(), input.direction),
+          300,
+          () => ctx.lookup.lookup(input.word.trim(), input.direction),
+        );
       }),
   }),
 
   // ===== 单词本 =====
   wordbook: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      return ctx.db.wordbooks.getData(ctx.userId);
+      // Phase 6：单词本缓存 30 秒（写操作时失效）
+      return ctx.cache.getOrSet(cacheKeys.wordbook(ctx.userId), 30, () =>
+        ctx.db.wordbooks.getData(ctx.userId),
+      );
     }),
 
     add: protectedProcedure
@@ -113,6 +122,7 @@ export const appRouter = router({
         const entry: WordbookEntry = { word, addedAt: Date.now() };
         const next = [...data, entry];
         await ctx.db.wordbooks.saveData(ctx.userId, next, Date.now());
+        await ctx.cache.invalidate(cacheKeys.wordbook(ctx.userId));
         // 同步初始化 FSRS 卡片（幂等）
         const existing = await ctx.db.fsrs.getCard(ctx.userId, word);
         if (!existing) {
@@ -132,6 +142,7 @@ export const appRouter = router({
         const next = data.filter((e) => e.word.toLowerCase() !== word);
         await ctx.db.wordbooks.saveData(ctx.userId, next, Date.now());
         await ctx.db.fsrs.deleteCard(ctx.userId, word);
+        await ctx.cache.invalidate(cacheKeys.wordbook(ctx.userId));
         return { ok: true, data: next };
       }),
 
@@ -142,6 +153,7 @@ export const appRouter = router({
       for (const c of cards) {
         await ctx.db.fsrs.deleteCard(ctx.userId, c.word);
       }
+      await ctx.cache.invalidate(cacheKeys.wordbook(ctx.userId));
       return { ok: true, data: [] as WordbookEntry[] };
     }),
   }),

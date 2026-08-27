@@ -22,10 +22,13 @@ export function createAppDB(reuse = true): AppDB {
   let db: AppDB;
 
   if (config.dbDriver === 'pg') {
+    // Phase 6：连接池调优（max=20 可配置，idle 30s 回收）
+    const poolMax = Number(process.env.PG_POOL_MAX) || 20;
     const pool = new pg.Pool({
       connectionString: config.databaseUrl,
-      max: 10,
+      max: poolMax,
       idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
     });
     db = new PostgresAppDB(pool);
   } else {

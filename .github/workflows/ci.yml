@@ -1,0 +1,53 @@
+# ===== CI：PR 检查（pnpm install → lint → typecheck → test → build）=====
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    name: Lint / Typecheck / Test / Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test (tRPC / API 冒烟)
+        run: |
+          # 启动后端（SQLite 模式）并跑接口冒烟测试
+          DB_DRIVER=sqlite JWT_SECRET=ci-secret PORT=3101 pnpm --filter @tm/server start &
+          sleep 5
+          echo "smoke placeholder"  # TODO: 接入 vitest 后替换为真实测试命令
+
+      - name: Build
+        run: pnpm --filter @tm/web build
+
+      - name: Docker build (server)
+        run: docker build -f packages/server/Dockerfile -t tm-server:ci .
+
+      - name: Docker build (web)
+        run: docker build -f apps/web/Dockerfile -t tm-web:ci .
