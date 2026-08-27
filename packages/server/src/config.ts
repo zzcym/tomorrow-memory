@@ -2,13 +2,15 @@
  * 应用配置：所有环境变量在此集中定义并做类型化解析
  */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** monorepo 根目录（server 包上一级） */
 export const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
+// 显式加载 monorepo 根目录 .env（pnpm --filter 运行时 cwd 是包目录，dotenv 默认找不到）
+dotenv.config({ path: path.join(PROJECT_ROOT, '.env') });
 
 export type DbDriver = 'pg' | 'sqlite';
 

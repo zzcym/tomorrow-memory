@@ -27,7 +27,25 @@ export class RedisService {
         enableOfflineQueue: false,
         retryStrategy: (times) => (times > 3 ? null : Math.min(times * 200, 1000)),
       });
+      // 必须监听 error，否则 ioredis 的 error 事件会变成 unhandled 异常导致进程崩溃
+      this.client.on('error', (err: Error) => {
+        if (this.available) {
+          console.warn('[REDIS] 连接错误（降级为内存实现）:', err.message);
+          this.available = false;
+        }
+      });
+      this.client.on('ready', () => {
+        this.available = true;
+        console.log('[REDIS] 连接成功');
+      });
       await this.client.connect();
+      if (this.client.status !== 'ready') {
+        // 连接失败（retryStrategy 已放弃）——标记不可用并清理
+        this.available = false;
+        console.warn('[REDIS] 不可用（降级为内存实现）');
+        this.client = null;
+        return;
+      }
       this.available = true;
       console.log('[REDIS] 连接成功');
     } catch (err) {

@@ -488,6 +488,19 @@ export class SqliteAppDB implements AppDB {
     for (const ddl of DDL) {
       this.db.exec(ddl);
     }
+    // 轻量迁移：旧版 data.db 缺列时补列（幂等；列已存在则 ALTER 失败被忽略）
+    const colExists = (table: string, col: string): boolean => {
+      const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+      return cols.some((c) => c.name === col);
+    };
+    if (colExists('users', 'password') === false) {
+      this.db.exec('ALTER TABLE users ADD COLUMN password TEXT DEFAULT NULL');
+      console.log('[DB] 迁移：users 增加 password 列');
+    }
+    if (colExists('profiles', 'daily_goal') === false) {
+      this.db.exec('ALTER TABLE profiles ADD COLUMN daily_goal INTEGER DEFAULT 10');
+      console.log('[DB] 迁移：profiles 增加 daily_goal 列');
+    }
   }
 
   async close(): Promise<void> {
