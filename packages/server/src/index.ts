@@ -20,6 +20,11 @@ import { createYoudaoClient } from './services/youdao.js';
 import { createDictionaryApiClient } from './services/dictionaryapi.js';
 import { DefaultLookupService } from './services/lookup.js';
 import { scheduleBackup } from './services/backup.js';
+import { ClickHouseClient } from './services/clickhouse.js';
+import { RedisService } from './services/redis.js';
+import { EventCollector } from './services/events.js';
+import { AnalystService } from './services/analyst.js';
+import { initTracing, shutdownTracing } from './telemetry/tracing.js';
 import type { AgentDeps } from '@tm/agent';
 import { LlmRouter } from '@tm/agent';
 
@@ -36,6 +41,16 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // ===== OpenTelemetry（Phase 5）：先于一切启动，自动 instrument HTTP/PG/Redis =====
+  initTracing({
+    enabled: process.env.OTEL_ENABLED === 'true',
+    endpoint: config.otelExporterUrl,
+  });
+  // LangSmith（LangGraph 追踪）：设置 LANGSMITH_TRACING=true + LANGSMITH_API_KEY 后自动生效
+  if (process.env.LANGSMITH_TRACING === 'true' && config.langsmithApiKey) {
+    console.log(`[LANGCHAIN] LangSmith 追踪已启用（project=${config.langsmithProject}）`);
+  }
+
   // 数据库
   const db = createAppDB();
   await db.init();
@@ -47,6 +62,15 @@ async function main(): Promise<void> {
   const dictApi = createDictionaryApiClient();
   const lookup = new DefaultLookupService(dictSources, youdao, dictApi);
   const sms = createSmsService();
+
+  // ===== Phase 5：ClickHouse + Redis + 事件流 =====
+  const clickhouse = new ClickHouseClient({ url: config.clickhouseUrl, tolerant: true });
+  await clickhouse.init();
+  const redis = new RedisService(config.redisUrl);
+  await redis.connect();
+  const events = new EventCollector(clickhouse, redis);
+  await events.start();
+  const analyst = new AnalystService(db, clickhouse, dictSources);
 
   // ===== Multi-Agent 编排依赖注入 =====
   const llmRouter = new LlmRouter({
@@ -61,6 +85,7 @@ async function main(): Promise<void> {
     fsrsCards: db.fsrs,
     wordbook: db.wordbooks,
     lookup,
+    analystPort: analyst,
     getCefrLevel: async () => {
       // TODO: 用户 CEFR 水平暂未持久化，默认 B1；Phase 3+ 可在 profiles 表增加 cefr_level 字段
       return 'B1';
@@ -68,7 +93,7 @@ async function main(): Promise<void> {
   };
   console.log(`[AGENT] LLM ${llmRouter.hasLlm ? '已配置（DeepSeek）' : '未配置（降级启发式/规则模式）'}`);
 
-  const runtime = createApp({ config, db, sms, lookup, dictSources, agentDeps, llmRouter });
+  const runtime = createApp({ config, db, sms, lookup, dictSources, agentDeps, llmRouter, events, analyst });
 
   // 备份调度（仅 PG 驱动有意义；SQLite 模式跳过，避免无谓报错）
   if (config.dbDriver === 'pg') {
@@ -88,8 +113,11 @@ async function main(): Promise<void> {
     console.log(`[SHUTDOWN] Received ${signal}, closing gracefully...`);
     server.close(() => {
       console.log('[SHUTDOWN] HTTP server closed');
+      void events.stop();
+      void redis.close();
       dictSources.close();
       db.close()
+        .then(() => shutdownTracing())
         .then(() => {
           console.log('[SHUTDOWN] Database closed');
           process.exit(0);

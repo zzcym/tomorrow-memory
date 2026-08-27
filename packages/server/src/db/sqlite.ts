@@ -6,6 +6,7 @@
 import type Database from 'better-sqlite3';
 import type {
   AdminUserRow,
+  AnalystCacheRow,
   AssessmentCacheRow,
   CefrLevel,
   ChatMessageRow,
@@ -17,6 +18,7 @@ import type {
 } from '@tm/shared';
 import { computeStreak, safeJsonParse } from '@tm/shared';
 import type {
+  AnalystCacheDB,
   AppDB,
   AssessmentDB,
   ChatDB,
@@ -91,6 +93,14 @@ const DDL: string[] = [
     question TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     UNIQUE (word, qtype)
+  )`,
+  `CREATE TABLE IF NOT EXISTS analyst_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE (user_id, period)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_fsrs_cards_user ON fsrs_cards (user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_tutor_cache_word ON tutor_cache (word)`,
@@ -402,6 +412,37 @@ export class SqliteAssessmentDB implements AssessmentDB {
   }
 }
 
+export class SqliteAnalystCacheDB implements AnalystCacheDB {
+  constructor(private readonly db: Database.Database) {}
+
+  get(userId: number, period: string): Promise<AnalystCacheRow | null> {
+    const row = this.db
+      .prepare('SELECT id, user_id, period, content, created_at FROM analyst_cache WHERE user_id = ? AND period = ?')
+      .get(userId, period) as SqliteRow | undefined;
+    return Promise.resolve(
+      row
+        ? {
+            id: Number(row.id),
+            user_id: Number(row.user_id),
+            period: String(row.period),
+            content: String(row.content),
+            created_at: Number(row.created_at),
+          }
+        : null,
+    );
+  }
+
+  set(userId: number, period: string, contentJson: string, now: number): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO analyst_cache (user_id, period, content, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (user_id, period) DO UPDATE SET content = excluded.content, created_at = excluded.created_at`,
+      )
+      .run(userId, period, contentJson, now);
+    return Promise.resolve();
+  }
+}
+
 export class SqliteAppDB implements AppDB {
   users: UserDB;
   wordbooks: WordbookDB;
@@ -411,6 +452,7 @@ export class SqliteAppDB implements AppDB {
   tutorCache: TutorCacheDB;
   chat: ChatDB;
   assessment: AssessmentDB;
+  analystCache: AnalystCacheDB;
 
   constructor(readonly db: Database.Database) {
     this.users = new SqliteUserDB(db);
@@ -421,6 +463,7 @@ export class SqliteAppDB implements AppDB {
     this.tutorCache = new SqliteTutorCacheDB(db);
     this.chat = new SqliteChatDB(db);
     this.assessment = new SqliteAssessmentDB(db);
+    this.analystCache = new SqliteAnalystCacheDB(db);
   }
 
   async createUser(phone: string, now: number): Promise<number> {

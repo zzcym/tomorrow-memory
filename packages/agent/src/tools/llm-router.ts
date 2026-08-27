@@ -14,7 +14,11 @@ import { ChatOpenAI, type ChatOpenAICallOptions } from '@langchain/openai';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages';
 import type { Runnable } from '@langchain/core/runnables';
+import { trace } from '@opentelemetry/api';
 import type { z } from 'zod';
+
+/** OTel tracer：每个 LLM 调用一个 span（agent_name / tokens / latency / cost） */
+const tracer = trace.getTracer('llm-router');
 
 export type LlmRole = 'strong' | 'fast' | 'classify';
 
@@ -149,12 +153,33 @@ export class LlmRouter {
         return new AIMessage(m.content);
       });
       try {
-        const res = await model.invoke(langMessages);
-        const text = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
-        const inputTokens = estimateTokens(messages.map((m) => m.content).join('\n'));
-        const outputTokens = estimateTokens(text);
-        this.record({ model: modelName, inputTokens, outputTokens, ts: Date.now() });
-        return { text, model: modelName, inputTokens, outputTokens, cached: false };
+        // OTel 手动 span：记录 agent_name / input_tokens / output_tokens / latency_ms / cost_usd
+        const started = Date.now();
+        const res = await tracer.startActiveSpan(`llm.${modelName}`, async (span) => {
+          span.setAttribute('agent_name', modelName);
+          span.setAttribute('llm.role', role);
+          try {
+            const out = await model.invoke(langMessages);
+            const text = typeof out.content === 'string' ? out.content : JSON.stringify(out.content);
+            const inputTokens = estimateTokens(messages.map((m) => m.content).join('\n'));
+            const outputTokens = estimateTokens(text);
+            const costUsd = this.estimateCostUsd(modelName, inputTokens, outputTokens);
+            span.setAttributes({
+              input_tokens: inputTokens,
+              output_tokens: outputTokens,
+              latency_ms: Date.now() - started,
+              cost_usd: costUsd,
+            });
+            this.record({ model: modelName, inputTokens, outputTokens, ts: Date.now() });
+            return { text, model: modelName, inputTokens, outputTokens, cached: false };
+          } catch (err) {
+            span.recordException(err as Error);
+            throw err;
+          } finally {
+            span.end();
+          }
+        });
+        return res;
       } catch (err) {
         // fallback 链：仅当主模型为 DeepSeek 且配置了备用端点时重试一次
         if (this.options.deepseekApiKey && this.options.fallbackApiKey) {
@@ -173,6 +198,13 @@ export class LlmRouter {
     return run;
   }
 
+  /** 估算成本（USD），供 span 标签使用 */
+  private estimateCostUsd(model: string, inputTokens: number, outputTokens: number): number {
+    const pi = PRICE_PER_MT_INPUT[model] ?? 0.3;
+    const po = PRICE_PER_MT_OUTPUT[model] ?? 1.2;
+    return (inputTokens / 1_000_000) * pi + (outputTokens / 1_000_000) * po;
+  }
+
   private record(u: UsageRecord): void {
     this.usage.push(u);
   }
@@ -186,22 +218,41 @@ export class LlmRouter {
     role: LlmRole = 'fast',
   ): AsyncGenerator<string, void, unknown> {
     const model = this.createModel(role);
+    const modelName = this.modelName(role);
     const langMessages: BaseMessage[] = messages.map((m) => {
       if (m.role === 'system') return new SystemMessage(m.content);
       if (m.role === 'user') return new HumanMessage(m.content);
       return new AIMessage(m.content);
     });
+    const started = Date.now();
+    // 流式调用同样打 span（在 generator 完成时写入统计）
+    const span = tracer.startSpan(`llm.stream.${modelName}`, {
+      attributes: { agent_name: modelName, 'llm.role': role },
+    });
     let full = '';
-    const stream = await model.stream(langMessages);
-    for await (const chunk of stream) {
-      const text = typeof chunk.content === 'string' ? chunk.content : '';
-      if (text) {
-        full += text;
-        yield text;
+    try {
+      const stream = await model.stream(langMessages);
+      for await (const chunk of stream) {
+        const text = typeof chunk.content === 'string' ? chunk.content : '';
+        if (text) {
+          full += text;
+          yield text;
+        }
       }
+      const outputTokens = estimateTokens(full);
+      span.setAttributes({
+        input_tokens: 0,
+        output_tokens: outputTokens,
+        latency_ms: Date.now() - started,
+        cost_usd: this.estimateCostUsd(modelName, 0, outputTokens),
+      });
+      this.record({ model: modelName, inputTokens: 0, outputTokens, ts: Date.now() });
+    } catch (err) {
+      span.recordException(err as Error);
+      throw err;
+    } finally {
+      span.end();
     }
-    const modelName = this.modelName(role);
-    this.record({ model: modelName, inputTokens: 0, outputTokens: estimateTokens(full), ts: Date.now() });
   }
 
   /** 累计 token 与估算成本（USD） */

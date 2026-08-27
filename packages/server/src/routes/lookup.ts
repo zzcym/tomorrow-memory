@@ -5,8 +5,9 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../middleware/auth.js';
 import type { LookupService } from '../services/lookup.js';
+import type { EventCollector } from '../services/events.js';
 
-export function createLookupRouter(lookup: LookupService): Hono<AuthEnv> {
+export function createLookupRouter(lookup: LookupService, events?: EventCollector): Hono<AuthEnv> {
   const r = new Hono<AuthEnv>();
 
   r.get('/api/lookup', async (c) => {
@@ -27,6 +28,14 @@ export function createLookupRouter(lookup: LookupService): Hono<AuthEnv> {
       if ('sourceLang' in result && result.sourceLang === 'zh' && result.error) {
         return c.json(result, 404);
       }
+      // Phase 5：学情事件（异步，不阻塞；匿名用户 user_id=0）
+      const userId = c.get('userId');
+      events?.record({
+        user_id: userId ?? 0,
+        event_type: 'lookup',
+        word_id: word,
+        metadata: { direction: directionParam, hit: !('notFound' in result) || !result.notFound },
+      });
       return c.json(result);
     } catch (err) {
       console.error('lookup error:', err);

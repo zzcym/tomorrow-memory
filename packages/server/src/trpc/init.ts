@@ -5,6 +5,8 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import type { AgentDeps, LlmRouter } from '@tm/agent';
 import type { AppDB } from '../db/types.js';
+import type { EventCollector } from '../services/events.js';
+import type { AnalystService } from '../services/analyst.js';
 import type { LookupService } from '../services/lookup.js';
 import type { SmsService } from '../services/sms.js';
 
@@ -16,6 +18,10 @@ export interface TrpcContext {
   llmRouter: LlmRouter;
   lookup: LookupService;
   sms: SmsService;
+  /** 学情事件采集器（Phase 5） */
+  events: EventCollector;
+  /** 学情分析服务（Phase 5） */
+  analyst: AnalystService;
 }
 
 const t = initTRPC.context<TrpcContext>().create();

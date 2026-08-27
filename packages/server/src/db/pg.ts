@@ -6,6 +6,7 @@
 import type pg from 'pg';
 import type {
   AdminUserRow,
+  AnalystCacheRow,
   AssessmentCacheRow,
   CefrLevel,
   ChatMessageRow,
@@ -17,6 +18,7 @@ import type {
 } from '@tm/shared';
 import { safeJsonParse } from '@tm/shared';
 import type {
+  AnalystCacheDB,
   AppDB,
   AssessmentDB,
   ChatDB,
@@ -91,6 +93,14 @@ const DDL: string[] = [
     question TEXT NOT NULL,
     created_at BIGINT NOT NULL,
     UNIQUE (word, qtype)
+  )`,
+  `CREATE TABLE IF NOT EXISTS analyst_cache (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    period TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    UNIQUE (user_id, period)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_fsrs_cards_user ON fsrs_cards (user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_tutor_cache_word ON tutor_cache (word)`,
@@ -382,6 +392,35 @@ export class PostgresAssessmentDB implements AssessmentDB {
   }
 }
 
+export class PostgresAnalystCacheDB implements AnalystCacheDB {
+  constructor(private readonly pool: pg.Pool) {}
+
+  async get(userId: number, period: string): Promise<AnalystCacheRow | null> {
+    const r = await this.pool.query(
+      'SELECT id, user_id, period, content, created_at FROM analyst_cache WHERE user_id = $1 AND period = $2',
+      [userId, period],
+    );
+    const row = r.rows[0];
+    return row
+      ? {
+          id: Number(row.id),
+          user_id: Number(row.user_id),
+          period: String(row.period),
+          content: String(row.content),
+          created_at: Number(row.created_at),
+        }
+      : null;
+  }
+
+  async set(userId: number, period: string, contentJson: string, now: number): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO analyst_cache (user_id, period, content, created_at) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, period) DO UPDATE SET content = EXCLUDED.content, created_at = EXCLUDED.created_at`,
+      [userId, period, contentJson, now],
+    );
+  }
+}
+
 export class PostgresAppDB implements AppDB {
   users: UserDB;
   wordbooks: WordbookDB;
@@ -391,6 +430,7 @@ export class PostgresAppDB implements AppDB {
   tutorCache: TutorCacheDB;
   chat: ChatDB;
   assessment: AssessmentDB;
+  analystCache: AnalystCacheDB;
 
   constructor(readonly pool: pg.Pool) {
     this.users = new PostgresUserDB(pool);
@@ -401,6 +441,7 @@ export class PostgresAppDB implements AppDB {
     this.tutorCache = new PostgresTutorCacheDB(pool);
     this.chat = new PostgresChatDB(pool);
     this.assessment = new PostgresAssessmentDB(pool);
+    this.analystCache = new PostgresAnalystCacheDB(pool);
   }
 
   async createUser(phone: string, now: number): Promise<number> {

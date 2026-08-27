@@ -10,6 +10,7 @@
 
 import type {
   AdminUserRow,
+  AnalystCacheRow,
   AssessmentCacheRow,
   CefrLevel,
   ChatMessageRow,
@@ -103,6 +104,12 @@ export interface AssessmentDB {
   set(word: string, qtype: string, questionJson: string, now: number): Promise<void>;
 }
 
+/** 学情洞察缓存域（Phase 5 使用，洞察结果 24h 缓存） */
+export interface AnalystCacheDB {
+  get(userId: number, period: string): Promise<AnalystCacheRow | null>;
+  set(userId: number, period: string, contentJson: string, now: number): Promise<void>;
+}
+
 /** 聚合数据库对象：所有域 + 跨表事务 + 生命周期 */
 export interface AppDB {
   users: UserDB;
@@ -113,6 +120,7 @@ export interface AppDB {
   tutorCache: TutorCacheDB;
   chat: ChatDB;
   assessment: AssessmentDB;
+  analystCache: AnalystCacheDB;
   /** 创建用户 + 默认 wordbook + 默认 profile（事务） */
   createUser(phone: string, now: number): Promise<number>;
   /** 初始化表结构 */
@@ -130,4 +138,5 @@ export type {
   AdminUserRow,
   ChatMessageRow,
   AssessmentCacheRow,
+  AnalystCacheRow,
 } from '@tm/shared';

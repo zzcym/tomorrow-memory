@@ -37,8 +37,15 @@ export interface AppConfig {
   embeddingModel: string;
   /** 向量数据库 Qdrant */
   qdrantUrl: string;
-  /** Redis（Phase 3+ 使用） */
+  /** Redis（缓存 + 事件流） */
   redisUrl: string;
+  /** ClickHouse（学情分析事件库，Phase 5） */
+  clickhouseUrl: string;
+  /** OTLP 追踪导出地址（Jaeger，Phase 5） */
+  otelExporterUrl: string;
+  /** LangSmith（LangGraph 追踪，Phase 5） */
+  langsmithApiKey: string;
+  langsmithProject: string;
   /** 词典数据路径 */
   dictDbPath: string;
   examplesDbPath: string;
@@ -80,6 +87,10 @@ export function loadConfig(): AppConfig {
     embeddingModel: str('EMBEDDING_MODEL', 'text-embedding-3-small'),
     qdrantUrl: str('QDRANT_URL', 'http://localhost:6333'),
     redisUrl: str('REDIS_URL', 'redis://localhost:6379'),
+    clickhouseUrl: str('CLICKHOUSE_URL', 'http://localhost:8123'),
+    otelExporterUrl: str('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318/v1/traces'),
+    langsmithApiKey: str('LANGSMITH_API_KEY', ''),
+    langsmithProject: str('LANGSMITH_PROJECT', 'tomorrow-memory'),
     dictDbPath: str('DICT_DB_PATH', path.join(dataDir, 'stardict.db')),
     examplesDbPath: str('EXAMPLES_DB_PATH', path.join(dataDir, 'examples.db')),
     ecDictPath: str('EC_DICT_PATH', path.join(dataDir, 'ec-cedict.json')),

@@ -151,8 +151,81 @@ export interface AssessmentCacheRow {
   created_at: number;
 }
 
+/** 分析洞察缓存行（analyst_cache 表） */
+export interface AnalystCacheRow {
+  id: number;
+  user_id: number;
+  period: string;
+  content: string;
+  created_at: number;
+}
+
 /** Agent 意图类型 */
 export type AgentIntent = 'lookup' | 'learn' | 'review' | 'assess' | 'report';
+
+/** ===== 学情分析（Phase 5） ===== */
+
+/** 词汇增长曲线数据点 */
+export interface GrowthPoint {
+  date: string;
+  newWords: number;
+  total: number;
+}
+
+/** 复习效率数据点 */
+export interface ReviewEfficiencyPoint {
+  date: string;
+  reviewCount: number;
+  /** 正确率（0-1），无数据时为 null */
+  accuracy: number | null;
+  /** 平均稳定性 */
+  avgStability: number;
+}
+
+/** 遗忘曲线分布（stability 区间） */
+export interface ForgettingBucket {
+  range: string;
+  count: number;
+}
+
+/** 学习时段分布（24h × 7d） */
+export interface StudyHeatmapCell {
+  hour: number;
+  dow: number;
+  count: number;
+}
+
+/** CEFR 等级分布 */
+export interface CefrBucket {
+  level: string;
+  count: number;
+}
+
+/** 学情分析数据集（含图表配置数据） */
+export interface AnalyticsDataset {
+  period: string;
+  generatedAt: number;
+  growthCurve: GrowthPoint[];
+  reviewEfficiency: ReviewEfficiencyPoint[];
+  forgettingCurve: ForgettingBucket[];
+  studyHeatmap: StudyHeatmapCell[];
+  cefrDistribution: CefrBucket[];
+  /** 数据来源：clickhouse | db-fallback */
+  source: 'clickhouse' | 'db-fallback';
+}
+
+/** LLM 洞察 */
+export interface AnalystInsight {
+  type: 'positive' | 'warning' | 'suggestion' | 'prediction';
+  text: string;
+}
+
+/** 分析报告（图表 + 洞察 + 建议） */
+export interface AnalysisReport {
+  dataset: AnalyticsDataset;
+  insights: AnalystInsight[];
+  cached: boolean;
+}
 
 /** 查词方向 */
 export type LookupDirection = 'auto' | 'en2zh' | 'zh2en';

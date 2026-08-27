@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: '/', label: '查词' },
   { href: '/study', label: '背单词' },
   { href: '/assess', label: '测评' },
+  { href: '/report', label: '分析' },
   { href: '/chat', label: 'AI 对话' },
   { href: '/profile', label: '我的' },
   { href: '/admin', label: '管理' },

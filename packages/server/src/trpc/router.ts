@@ -21,6 +21,7 @@ import {
   cardFromJson,
   cardToJson,
   createDefaultCard,
+  generateInsights,
   generateQuestion,
   gradeAnswer,
   pickQuestionType,
@@ -29,6 +30,7 @@ import {
   type AssessmentQuestion,
   type AssessmentQuestionType,
 } from '@tm/agent';
+import type { AnalystInsight } from '@tm/shared';
 import { loadConfig } from '../config.js';
 import { protectedProcedure, publicProcedure, router } from './init.js';
 
@@ -117,6 +119,8 @@ export const appRouter = router({
           const now = Date.now();
           await ctx.db.fsrs.upsertCard(ctx.userId, word, cardToJson(createDefaultCard(new Date(now))), null, now);
         }
+        // Phase 5：学情事件（异步，不阻塞）
+        ctx.events.record({ user_id: ctx.userId, event_type: 'word_added', word_id: word });
         return { ok: true, added: true, data: next };
       }),
 
@@ -168,6 +172,13 @@ export const appRouter = router({
         const before = card.stability;
         const updated = applyRating(card, input.rating, now);
         await ctx.db.fsrs.upsertCard(ctx.userId, word, cardToJson(updated), now.getTime(), now.getTime());
+        // Phase 5：学情事件（异步）
+        ctx.events.record({
+          user_id: ctx.userId,
+          event_type: 'review',
+          word_id: word,
+          metadata: { rating: input.rating, stability: updated.stability },
+        });
         return {
           ok: true,
           word,
@@ -195,6 +206,8 @@ export const appRouter = router({
       const userId = ctx.userId;
       const todayStr = getDateStr();
       await ctx.db.checkins.checkin(userId, todayStr, Date.now());
+      // Phase 5：学情事件（异步）
+      ctx.events.record({ user_id: userId, event_type: 'checkin', word_id: '' });
       const streak = await ctx.db.checkins.getStreak(userId);
       return { ok: true, streak };
     }),
@@ -455,6 +468,13 @@ export const appRouter = router({
         const before = card.stability;
         const updated = applyRating(card, rating, now);
         await ctx.db.fsrs.upsertCard(ctx.userId, word, cardToJson(updated), now.getTime(), now.getTime());
+        // Phase 5：学情事件（异步，metadata.score 供正确率聚合）
+        ctx.events.record({
+          user_id: ctx.userId,
+          event_type: 'assess',
+          word_id: word,
+          metadata: { score, correct, qtype: question.type },
+        });
 
         return {
           ok: true,
@@ -479,6 +499,43 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const messages = await ctx.db.chat.getRecentMessages(ctx.userId, input.threadId, 40);
         return { threadId: input.threadId, messages };
+      }),
+  }),
+
+  // ===== 学情分析（Phase 5） =====
+  analyst: router({
+    /**
+     * 获取分析报告（图表数据 + LLM 洞察）。
+     * 洞察结果缓存 24h（analyst_cache 表，按 user_id + period）。
+     */
+    report: protectedProcedure
+      .input(
+        z.object({
+          period: z.enum(['7d', '30d', '90d', 'all']).optional().default('30d'),
+          refresh: z.boolean().optional().default(false),
+        }),
+      )
+      .query(async ({ ctx, input }) => {
+        const userId = ctx.userId;
+        const CACHE_TTL = 24 * 60 * 60 * 1000;
+
+        // 数据集实时计算（不缓存——数据本身轻量，保证图表最新）
+        const dataset = await ctx.analyst.analyze(userId, input.period);
+
+        // 洞察缓存：24h 命中直接返回
+        if (!input.refresh) {
+          const cached = await ctx.db.analystCache.get(userId, input.period);
+          if (cached && Date.now() - cached.created_at < CACHE_TTL) {
+            const insights = JSON.parse(cached.content) as AnalystInsight[];
+            return { dataset, insights, cached: true };
+          }
+        }
+
+        const insights = await generateInsights(ctx.llmRouter, dataset, {
+          totalWords: dataset.growthCurve.at(-1)?.total,
+        });
+        await ctx.db.analystCache.set(userId, input.period, JSON.stringify(insights), Date.now());
+        return { dataset, insights, cached: false };
       }),
   }),
 });

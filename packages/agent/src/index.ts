@@ -47,10 +47,24 @@ export {
   type AssessmentScore,
 } from './tools/assessment.js';
 export {
+  generateInsights,
+  fallbackInsights,
+  InsightsSchema,
+  type UserProfileLite,
+} from './tools/analyst.js';
+export {
   createThreadedAgent,
   type ThreadedAgent,
   type ThreadedAgentStep,
 } from './threaded.js';
 // HITL 原语转发（供 server 层使用）
 export { Command, MemorySaver, interrupt } from '@langchain/langgraph';
-export type { AgentDeps, FsrsCardPort, LookupPort, TutorCachePort, WordbookPort } from './deps.js';
+export type {
+  AgentDeps,
+  AnalystPort,
+  AnalysisPeriod,
+  FsrsCardPort,
+  LookupPort,
+  TutorCachePort,
+  WordbookPort,
+} from './deps.js';

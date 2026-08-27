@@ -3,7 +3,7 @@
  */
 
 import { Annotation } from '@langchain/langgraph';
-import type { AgentIntent, CefrLevel, TutorContent } from '@tm/shared';
+import type { AgentIntent, AnalyticsDataset, AnalystInsight, CefrLevel, TutorContent } from '@tm/shared';
 import type {
   LookupEn2ZhFallback,
   LookupEn2ZhSuccess,
@@ -71,6 +71,10 @@ export const AgentStateAnnotation = Annotation.Root({
   }),
   /** 测评反馈 */
   reviewFeedback: Annotation<ReviewFeedback | undefined>({
+    reducer: (cur, next) => next ?? cur,
+  }),
+  /** 学情分析结果（report 意图） */
+  analysis: Annotation<{ dataset: AnalyticsDataset; insights: AnalystInsight[] } | undefined>({
     reducer: (cur, next) => next ?? cur,
   }),
   /** LLM 补充内容（词源/记忆提示等） */

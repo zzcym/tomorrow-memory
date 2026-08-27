@@ -16,7 +16,7 @@ import { makeOrchestratorNode } from './nodes/orchestrator.js';
 import { makeLexiconNode } from './nodes/lexicon.js';
 import { makeTutorNode } from './nodes/tutor.js';
 import { makeSchedulerNode } from './nodes/scheduler.js';
-import { makeReportNode } from './nodes/report.js';
+import { makeAnalystNode } from './nodes/analyst.js';
 import { AgentStateAnnotation, type AgentState, type AgentStateUpdate } from './state.js';
 import type { LlmRouter } from './tools/llm-router.js';
 
@@ -25,7 +25,7 @@ const ROUTE_TABLE: Record<AgentIntent, string> = {
   learn: 'tutor',
   review: 'scheduler',
   assess: 'scheduler',
-  report: 'report',
+  report: 'analyst',
 };
 
 function routeByIntent(state: AgentState): string {
@@ -43,18 +43,18 @@ export function buildAgentGraph(deps: AgentDeps, router: LlmRouter, options: Age
     .addNode('lexicon', makeLexiconNode(deps, router))
     .addNode('tutor', makeTutorNode(deps, router))
     .addNode('scheduler', makeSchedulerNode(deps))
-    .addNode('report', makeReportNode(deps, router))
+    .addNode('analyst', makeAnalystNode(deps, router))
     .addEdge(START, 'orchestrator')
     .addConditionalEdges('orchestrator', routeByIntent, {
       lexicon: 'lexicon',
       tutor: 'tutor',
       scheduler: 'scheduler',
-      report: 'report',
+      analyst: 'analyst',
     })
     .addEdge('lexicon', END)
     .addEdge('tutor', END)
     .addEdge('scheduler', END)
-    .addEdge('report', END);
+    .addEdge('analyst', END);
 
   return options.checkpointer ? graph.compile({ checkpointer: options.checkpointer }) : graph.compile();
 }

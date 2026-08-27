@@ -28,6 +28,9 @@ import { createChatRouter } from './routes/chat.js';
 import type { DictSources } from './services/dict-sources.js';
 import type { LookupService } from './services/lookup.js';
 import type { SmsService } from './services/sms.js';
+import type { EventCollector } from './services/events.js';
+import type { AnalystService } from './services/analyst.js';
+import { metrics } from './telemetry/metrics.js';
 import { appRouter } from './trpc/router.js';
 import type { TrpcContext } from './trpc/init.js';
 
@@ -39,6 +42,10 @@ export interface AppDeps {
   dictSources: DictSources;
   agentDeps: AgentDeps;
   llmRouter: LlmRouter;
+  /** 学情事件采集器（Phase 5） */
+  events: EventCollector;
+  /** 学情分析服务（Phase 5） */
+  analyst: AnalystService;
 }
 
 export interface AppRuntime {
@@ -47,14 +54,33 @@ export interface AppRuntime {
   injectWebSocket: (server: Server) => void;
 }
 
+/** HTTP 请求指标（Prometheus） */
+const httpRequests = metrics.counter('http_requests_total', 'HTTP 请求总数');
+const httpDuration = metrics.histogram('http_request_duration_seconds', 'HTTP 请求耗时');
+
 export function createApp(deps: AppDeps): AppRuntime {
-  const { config, db, sms, lookup, agentDeps, llmRouter } = deps;
+  const { config, db, sms, lookup, agentDeps, llmRouter, events, analyst } = deps;
   const app = new Hono<AuthEnv>();
 
   app.use('*', cors());
   app.onError((err, c) => {
     console.error('[ERROR]', err);
     return c.json({ error: '服务器内部错误' }, 500);
+  });
+
+  // HTTP 指标中间件
+  app.use('*', async (c, next) => {
+    const started = performance.now();
+    await next();
+    const status = c.res.status;
+    httpRequests.inc({ method: c.req.method, path: c.req.path, status: String(status) });
+    httpDuration.observe((performance.now() - started) / 1000, { method: c.req.method, path: c.req.path });
+  });
+
+  // ===== /metrics（Prometheus，Phase 5） =====
+  app.get('/metrics', (c) => {
+    c.header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    return c.body(metrics.render());
   });
 
   // ===== WebSocket 对话（Phase 4） =====
@@ -85,6 +111,8 @@ export function createApp(deps: AppDeps): AppRuntime {
           llmRouter,
           lookup,
           sms,
+          events,
+          analyst,
         } satisfies TrpcContext;
       },
     }),
@@ -95,7 +123,7 @@ export function createApp(deps: AppDeps): AppRuntime {
   app.route('/', createWordbookRouter(db));
   app.route('/', createProfileRouter(db));
   app.route('/', createCheckinRouter(db));
-  app.route('/', createLookupRouter(lookup));
+  app.route('/', createLookupRouter(lookup, events));
   app.route('/', createAdminRouter(db));
   // Phase 2：Multi-Agent API（新增，不影响旧 API）
   app.route('/', createAgentRouter(agentDeps, llmRouter, lookup, config));
