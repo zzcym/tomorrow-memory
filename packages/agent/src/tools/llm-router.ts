@@ -29,6 +29,12 @@ export interface LlmRouterOptions {
   fallbackApiKey?: string;
   fallbackBaseUrl?: string;
   fallbackModel?: string;
+  /**
+   * 强场景（教学/分析）模型名。
+   * 默认 deepseek-chat：V3.x 速度快、成本低，已含推理能力；
+   * 如需更强推理可显式设为 deepseek-reasoner（生成更慢、更贵）。
+   */
+  strongModel?: string;
   /** 是否启用结果缓存（默认 true） */
   enableCache?: boolean;
 }
@@ -81,10 +87,11 @@ export class LlmRouter {
   /** 创建指定场景的 chat 模型 */
   private createModel(role: LlmRole): BaseChatModel<ChatOpenAICallOptions> {
     if (this.options.deepseekApiKey) {
-      // DeepSeek 主模型
+      // DeepSeek 主模型（strong 默认 deepseek-chat，可配置为 deepseek-reasoner）
+      const strongModel = this.options.strongModel ?? 'deepseek-chat';
       return new ChatOpenAI({
         apiKey: this.options.deepseekApiKey,
-        model: role === 'strong' ? 'deepseek-reasoner' : 'deepseek-chat',
+        model: role === 'strong' ? strongModel : 'deepseek-chat',
         temperature: role === 'classify' ? 0 : 0.7,
         maxTokens: role === 'strong' ? 4096 : 2048,
         configuration: {
@@ -109,7 +116,7 @@ export class LlmRouter {
   /** 模型名（用于统计） */
   private modelName(role: LlmRole): string {
     if (this.options.deepseekApiKey) {
-      return role === 'strong' ? 'deepseek-reasoner' : 'deepseek-chat';
+      return role === 'strong' ? (this.options.strongModel ?? 'deepseek-chat') : 'deepseek-chat';
     }
     return this.options.fallbackModel ?? 'gpt-4o-mini';
   }

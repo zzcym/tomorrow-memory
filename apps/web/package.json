@@ -36,7 +36,9 @@
     "sonner": "^1.7.0",
     "tailwind-merge": "^2.5.4",
     "@tm/server": "workspace:*",
-    "recharts": "^2.13.0"
+    "recharts": "^2.13.0",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

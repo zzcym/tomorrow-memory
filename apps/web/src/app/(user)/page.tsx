@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Markdown } from '@/components/markdown';
 import type { LookupResponse } from '@tm/shared';
 
 const HISTORY_KEY = 'tm_search_history';
@@ -303,8 +304,10 @@ export default function HomePage(): React.JSX.Element {
                   <Badge className="bg-primary">AI 教学</Badge>
                   {!aiDone && <span className="text-xs text-muted-foreground">流式生成中…</span>}
                 </div>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {aiText}
+                <div>
+                  {aiText ? (
+                    <Markdown content={aiText} />
+                  ) : null}
                   {!aiDone && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle" />}
                 </div>
               </CardContent>

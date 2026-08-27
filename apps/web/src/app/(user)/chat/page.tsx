@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Markdown } from '@/components/markdown';
 
 interface ChatMessage {
   id: string;
@@ -186,7 +187,11 @@ export default function ChatPage(): React.JSX.Element {
                       : 'bg-muted'
                 }`}
               >
-                {m.content}
+                {m.role === 'assistant' ? (
+                  <Markdown content={m.content} />
+                ) : (
+                  <span className="whitespace-pre-wrap">{m.content}</span>
+                )}
                 {m.streaming && <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-primary align-middle" />}
               </div>
             </div>
