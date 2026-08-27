@@ -21,7 +21,6 @@ const NAV_ITEMS = [
   { href: '/report', label: '分析' },
   { href: '/chat', label: 'AI 对话' },
   { href: '/profile', label: '我的' },
-  { href: '/admin', label: '管理' },
 ];
 
 export function Header(): React.JSX.Element {
