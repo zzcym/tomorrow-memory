@@ -10,6 +10,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { BookOpen, Moon, Sun, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/components/theme-provider';
 import { LoginDialog } from '@/components/login-dialog';
 import { clearToken, clearUser, getToken, getUser } from '@/lib/auth';
@@ -71,8 +72,16 @@ export function Header(): React.JSX.Element {
           </Button>
           {authed ? (
             <div className="flex items-center gap-2">
-              <Link href="/profile" className="text-sm text-muted-foreground hover:text-foreground">
-                {user?.nickname || user?.phone || '我的'}
+              <Link href="/profile" className="flex items-center gap-2">
+                <Avatar className="h-7 w-7">
+                  <AvatarImage src={user?.avatar || undefined} />
+                  <AvatarFallback className="bg-primary/15 text-xs text-primary">
+                    {(user?.nickname || user?.phone || '?').slice(0, 1).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm text-muted-foreground hover:text-foreground">
+                  {user?.nickname || user?.phone || '我的'}
+                </span>
               </Link>
               <Button variant="outline" size="sm" onClick={logout}>
                 退出

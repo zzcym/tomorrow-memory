@@ -48,10 +48,13 @@ export const appRouter = router({
         z.object({
           word: z.string().min(1).max(100),
           direction: z.enum(['auto', 'en2zh', 'zh2en']).optional().default('auto'),
+          // 前端查询序号：同一单词重复查询时递增，强制触发新订阅（服务端忽略该字段）
+          seq: z.number().int().optional(),
         }),
       )
       .subscription(async function* ({ input, ctx }) {
         const word = input.word.trim();
+        void input.seq;
         // 1. 静态查词（毫秒级）
         const staticResult = await ctx.lookup.lookup(word, input.direction);
         yield { type: 'static', word, result: staticResult };

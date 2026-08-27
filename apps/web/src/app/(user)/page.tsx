@@ -56,6 +56,8 @@ export default function HomePage(): React.JSX.Element {
   const [staticResult, setStaticResult] = React.useState<LookupResponse | null>(null);
   const [aiText, setAiText] = React.useState('');
   const [aiDone, setAiDone] = React.useState(false);
+  // 查询序号：同一单词重复查询时递增，强制 subscription 重新触发（解决同词二次查询卡住）
+  const [querySeq, setQuerySeq] = React.useState(0);
 
   React.useEffect(() => {
     setHistory(loadHistory());
@@ -84,14 +86,30 @@ export default function HomePage(): React.JSX.Element {
     return !!activeWord && (list ?? []).some((e) => e.word === activeWord);
   }, [activeWord, utils.wordbook.list]);
 
-  // SSE 流式查词（tRPC subscription）
+  // SSE 流式查词（tRPC subscription；seq 保证同词重复查询也重新触发）
   trpc.dictionary.lookup.useSubscription(
-    { word: activeWord ?? '', direction },
+    { word: activeWord ?? '', direction, seq: querySeq },
     {
       enabled: !!activeWord,
       onData: (chunk: LookupChunk) => {
         if (chunk.type === 'static') {
           setStaticResult(chunk.result ?? null);
+          // 查词命中后自动加入单词本（登录 + en2zh 命中 + 尚未加入时，静默添加）
+          const r = chunk.result;
+          if (
+            authed &&
+            r !== null &&
+            r !== undefined &&
+            !('sourceLang' in r) &&
+            !('notFound' in r && r.notFound) &&
+            activeWord
+          ) {
+            const list = utils.wordbook.list.getData();
+            const exists = (list ?? []).some((e) => e.word.toLowerCase() === activeWord.toLowerCase());
+            if (!exists) {
+              addWord.mutate({ word: activeWord }, { onSuccess: () => void utils.wordbook.list.invalidate() });
+            }
+          }
         } else if (chunk.type === 'ai-start') {
           setAiText('');
           setAiDone(false);
@@ -110,6 +128,7 @@ export default function HomePage(): React.JSX.Element {
     const trimmed = w.trim();
     if (!trimmed) return;
     setActiveWord(trimmed);
+    setQuerySeq((s) => s + 1);
     setStaticResult(null);
     setAiText('');
     setAiDone(false);

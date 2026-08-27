@@ -10,10 +10,10 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarDays, Flame, LogOut, Save, Target, BookMarked } from 'lucide-react';
+import { CalendarDays, Camera, Flame, LogOut, Save, Target, BookMarked } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { clearToken, clearUser, getUser } from '@/lib/auth';
+import { clearToken, clearUser, getUser, setUser } from '@/lib/auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+/** 头像最大尺寸（base64，约 1.5MB） */
+const MAX_AVATAR_BYTES = 1.5 * 1024 * 1024;
 
 /** 生成近 52 周的热力图数据（按日期 → 复习次数） */
 function buildHeatmap(reviewDates: string[]): { weeks: Array<Array<{ date: string; count: number }>> } {
@@ -76,13 +78,58 @@ export default function ProfilePage(): React.JSX.Element {
   const [nickname, setNickname] = React.useState('');
   const [dailyGoal, setDailyGoal] = React.useState(10);
   const [newPassword, setNewPassword] = React.useState('');
+  const [avatar, setAvatar] = React.useState('');
+  const fileRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (profile.data) {
       setNickname(profile.data.nickname);
       setDailyGoal(profile.data.dailyGoal);
+      setAvatar(profile.data.avatar);
     }
   }, [profile.data]);
+
+  /** 上传头像：本地图片 → base64（压缩到 512px 内） */
+  const uploadAvatar = (file: File): void => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, size / Math.max(img.width, img.height));
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        if (dataUrl.length > MAX_AVATAR_BYTES) {
+          toast.error('图片过大，请选择更小的图片');
+          return;
+        }
+        setAvatar(dataUrl);
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  /** 保存头像并同步本地登录态（Header 立即显示） */
+  const saveAvatar = (): void => {
+    update.mutate(
+      { avatar },
+      {
+        onSuccess: () => {
+          if (user) {
+            setUser({ ...user, avatar });
+          }
+          toast.success('头像已更新');
+          void utils.profile.get.invalidate();
+        },
+      },
+    );
+  };
 
   if (!user) {
     return <p className="py-20 text-center text-muted-foreground">请先登录。</p>;
@@ -93,18 +140,49 @@ export default function ProfilePage(): React.JSX.Element {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      {/* 头部信息 */}
+      {/* 头部信息 + 头像设置 */}
       <Card>
-        <CardContent className="flex items-center gap-4 pt-6">
-          <Avatar className="h-16 w-16">
-            <AvatarImage src={user.avatar || undefined} />
-            <AvatarFallback className="bg-primary/15 text-primary">
-              {(data?.nickname || user.phone || '?').slice(0, 1).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div>
+        <CardContent className="flex flex-wrap items-center gap-4 pt-6">
+          <div className="relative">
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={avatar || user.avatar || undefined} />
+              <AvatarFallback className="bg-primary/15 text-primary">
+                {(data?.nickname || user.phone || '?').slice(0, 1).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow"
+              title="上传头像"
+            >
+              <Camera className="h-3.5 w-3.5" />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadAvatar(f);
+                e.target.value = '';
+              }}
+            />
+          </div>
+          <div className="min-w-[200px] flex-1">
             <h2 className="text-xl font-bold">{data?.nickname || '未设置昵称'}</h2>
             <p className="text-sm text-muted-foreground">{me.data?.phone ?? user.phone}</p>
+            <div className="mt-2 flex gap-2">
+              <Input
+                placeholder="头像图片 URL（可选）"
+                value={avatar.startsWith('data:') ? '' : avatar}
+                onChange={(e) => setAvatar(e.target.value)}
+                className="h-8 text-xs"
+              />
+              <Button size="sm" variant="outline" onClick={saveAvatar} disabled={avatar === (data?.avatar ?? '')}>
+                保存头像
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

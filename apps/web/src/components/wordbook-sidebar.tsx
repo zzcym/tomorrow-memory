@@ -10,7 +10,7 @@
  */
 
 import * as React from 'react';
-import { BookMarked, Cloud, HardDrive, Trash2, Undo2 } from 'lucide-react';
+import { ArrowLeftRight, BookMarked, Cloud, HardDrive, PanelLeftClose, Trash2, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { getToken } from '@/lib/auth';
@@ -29,7 +29,13 @@ import {
 } from '@/components/ui/dialog';
 import type { WordbookEntry } from '@tm/shared';
 
-export function WordbookSidebar(): React.JSX.Element | null {
+export function WordbookSidebar({
+  onCollapse,
+  onMove,
+}: {
+  onCollapse?: () => void;
+  onMove?: () => void;
+}): React.JSX.Element | null {
   const [search, setSearch] = React.useState('');
   const [confirmClear, setConfirmClear] = React.useState(false);
   const [pendingRemove, setPendingRemove] = React.useState<string | null>(null);
@@ -79,6 +85,13 @@ export function WordbookSidebar(): React.JSX.Element | null {
           {navigator.onLine ? <Cloud className="h-3 w-3" /> : <HardDrive className="h-3 w-3" />}
           {navigator.onLine ? '云端' : '本地'}
         </Badge>
+        {/* 位置切换（左/右） + 收起 */}
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMove} title="切换侧边栏位置">
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onCollapse} title="收起侧边栏">
+          <PanelLeftClose className="h-3.5 w-3.5" />
+        </Button>
       </div>
       <div className="px-4 pb-2">
         <Input
