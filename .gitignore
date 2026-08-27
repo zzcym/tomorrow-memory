@@ -42,6 +42,16 @@ tmenglish.conf
 *.zip
 package-lock.json
 
+# 历史遗留文件（已清理，防误提交）
+server_prod.js
+script_prod.js
+requirements.html
+quick_deploy.py
+ecosystem.config.js
+deploy.js
+deploy.py
+deploy.sh
+
 # IDE
 .vscode/
 .idea/
