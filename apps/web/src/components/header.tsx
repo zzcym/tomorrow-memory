@@ -7,13 +7,15 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Moon, Sun, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTheme } from '@/components/theme-provider';
 import { LoginDialog } from '@/components/login-dialog';
-import { clearToken, clearUser, getToken, getUser } from '@/lib/auth';
+import { clearToken, clearUser, getUser, type StoredUser } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 
 const NAV_ITEMS = [
   { href: '/', label: '查词' },
@@ -27,24 +29,27 @@ const NAV_ITEMS = [
 export function Header(): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { theme, toggle } = useTheme();
   const [loginOpen, setLoginOpen] = React.useState(false);
-  const [authed, setAuthed] = React.useState(false);
+  const authed = useAuthed();
+  // 用户信息在 effect 中读取：渲染期读 localStorage 会造成 hydration mismatch
+  const [user, setUserState] = React.useState<StoredUser | null>(null);
 
   React.useEffect(() => {
-    setAuthed(!!getToken());
-  }, [pathname]);
+    setUserState(getUser());
+  }, [authed, pathname]);
 
   const logout = (): void => {
     clearToken();
     clearUser();
-    setAuthed(false);
+    setUserState(null);
+    // 清掉上一账号的缓存（单词本/报告等），避免换号登录闪现旧数据
+    queryClient.clear();
     toast.success('已退出登录');
     router.push('/');
     router.refresh();
   };
-
-  const user = getUser();
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
@@ -95,7 +100,7 @@ export function Header(): React.JSX.Element {
           )}
         </div>
       </div>
-      <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} onLoggedIn={() => setAuthed(true)} />
+      <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
     </header>
   );
 }

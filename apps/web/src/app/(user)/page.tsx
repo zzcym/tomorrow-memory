@@ -13,7 +13,7 @@ import * as React from 'react';
 import { BookmarkPlus, History, Search, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { getToken } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +56,7 @@ export default function HomePage(): React.JSX.Element {
   const [staticResult, setStaticResult] = React.useState<LookupResponse | null>(null);
   const [aiText, setAiText] = React.useState('');
   const [aiDone, setAiDone] = React.useState(false);
+  const [aiFailed, setAiFailed] = React.useState(false);
   // 查询序号：同一单词重复查询时递增，强制 subscription 重新触发（解决同词二次查询卡住）
   const [querySeq, setQuerySeq] = React.useState(0);
 
@@ -63,13 +64,14 @@ export default function HomePage(): React.JSX.Element {
     setHistory(loadHistory());
   }, []);
 
-  const authed = !!getToken();
+  const authed = useAuthed();
   const utils = trpc.useUtils();
   const addWord = trpc.wordbook.add.useMutation({
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       if (data.added) {
+        // 用本次 mutation 的变量（而非渲染期 activeWord，避免 toast 停留期间查了别的词导致撤销错词）
         toast('已加入单词本', {
-          action: { label: '撤销', onClick: () => removeWord.mutate({ word: activeWord ?? '' }) },
+          action: { label: '撤销', onClick: () => removeWord.mutate({ word: variables.word }) },
         });
       } else {
         toast.info('该单词已在单词本中');
@@ -80,11 +82,12 @@ export default function HomePage(): React.JSX.Element {
     onError: (err) => toast.error(err.message),
   });
   const removeWord = trpc.wordbook.remove.useMutation();
+  const wordbookData = trpc.wordbook.list.useQuery(undefined, { enabled: authed });
 
   const inWordbook = React.useMemo(() => {
-    const list = utils.wordbook.list.getData();
-    return !!activeWord && (list ?? []).some((e) => e.word === activeWord);
-  }, [activeWord, utils.wordbook.list]);
+    if (!authed) return false;
+    return !!activeWord && (wordbookData.data ?? []).some((e) => e.word === activeWord);
+  }, [activeWord, authed, wordbookData.data]);
 
   // SSE 流式查词（tRPC subscription；seq 保证同词重复查询也重新触发）
   trpc.dictionary.lookup.useSubscription(
@@ -104,22 +107,33 @@ export default function HomePage(): React.JSX.Element {
             !('notFound' in r && r.notFound) &&
             activeWord
           ) {
-            const list = utils.wordbook.list.getData();
-            const exists = (list ?? []).some((e) => e.word.toLowerCase() === activeWord.toLowerCase());
+            const exists = (wordbookData.data ?? []).some(
+              (e) => e.word.toLowerCase() === activeWord.toLowerCase(),
+            );
             if (!exists) {
-              addWord.mutate({ word: activeWord }, { onSuccess: () => void utils.wordbook.list.invalidate() });
+              addWord.mutate({ word: activeWord });
             }
           }
         } else if (chunk.type === 'ai-start') {
           setAiText('');
           setAiDone(false);
+          setAiFailed(false);
         } else if (chunk.type === 'ai-chunk') {
           setAiText((prev) => prev + (chunk.text ?? ''));
         } else if (chunk.type === 'ai-done') {
           setAiDone(true);
         } else if (chunk.type === 'ai-error') {
           setAiDone(true);
+          setAiFailed(true);
+        } else if (chunk.type === 'done') {
+          // 无 LLM（降级模式）时服务端只发 static + done，必须结束"生成中"状态
+          setAiDone(true);
         }
+      },
+      onError: () => {
+        // 断流/服务端出错：结束无限骨架屏，显示可重试提示
+        setAiDone(true);
+        setAiFailed(true);
       },
     },
   );
@@ -132,6 +146,7 @@ export default function HomePage(): React.JSX.Element {
     setStaticResult(null);
     setAiText('');
     setAiDone(false);
+    setAiFailed(false);
     // 记录历史
     const next = [trimmed, ...loadHistory().filter((h) => h !== trimmed)].slice(0, 10);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
@@ -316,21 +331,32 @@ export default function HomePage(): React.JSX.Element {
           </Card>
 
           {/* ===== AI 内容（流式） ===== */}
-          {(aiText || !aiDone) && (
-            <Card className="animate-fade-in-up border-primary/30">
-              <CardContent className="pt-6">
-                <div className="mb-2 flex items-center gap-2">
-                  <Badge className="bg-primary">AI 教学</Badge>
-                  {!aiDone && <span className="text-xs text-muted-foreground">流式生成中…</span>}
-                </div>
-                <div>
-                  {aiText ? (
-                    <Markdown content={aiText} />
-                  ) : null}
-                  {!aiDone && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle" />}
-                </div>
+          {aiFailed ? (
+            <Card className="animate-fade-in-up">
+              <CardContent className="flex items-center justify-between py-4 text-sm text-muted-foreground">
+                <span>AI 教学内容生成失败，静态释义不受影响。</span>
+                <Button size="sm" variant="outline" onClick={() => search(activeWord)}>
+                  重试
+                </Button>
               </CardContent>
             </Card>
+          ) : (
+            (aiText || !aiDone) && (
+              <Card className="animate-fade-in-up border-primary/30">
+                <CardContent className="pt-6">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Badge className="bg-primary">AI 教学</Badge>
+                    {!aiDone && <span className="text-xs text-muted-foreground">流式生成中…</span>}
+                  </div>
+                  <div>
+                    {aiText ? (
+                      <Markdown content={aiText} />
+                    ) : null}
+                    {!aiDone && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle" />}
+                  </div>
+                </CardContent>
+              </Card>
+            )
           )}
           <Separator />
         </>

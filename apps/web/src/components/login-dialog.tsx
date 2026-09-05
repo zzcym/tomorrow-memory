@@ -52,7 +52,9 @@ export function LoginDialog({
 
   const sendCode = trpc.auth.sendCode.useMutation({
     onSuccess: () => {
-      toast.success('验证码已发送（开发模式见后端控制台，万能码 12345）');
+      // 开发环境提示查看后端控制台；绝不向终端用户展示任何后门码
+      const devHint = process.env.NODE_ENV !== 'production' ? '（开发模式：验证码见后端控制台）' : '';
+      toast.success(`验证码已发送${devHint}`);
       setCooldown(60);
       const timer = setInterval(() => {
         setCooldown((c) => {
@@ -60,9 +62,18 @@ export function LoginDialog({
           return c - 1;
         });
       }, 1000);
+      cooldownTimerRef.current = timer;
     },
     onError: (err) => toast.error(err.message),
   });
+
+  // 卸载时清理倒计时，避免弹窗关闭后仍 setState
+  const cooldownTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  React.useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    };
+  }, []);
 
   const submit = (e: React.FormEvent): void => {
     e.preventDefault();
@@ -97,8 +108,13 @@ export function LoginDialog({
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                 />
-                <Button type="button" variant="outline" disabled={cooldown > 0} onClick={() => sendCode.mutate({ phone })}>
-                  {cooldown > 0 ? `${cooldown}s` : '发送验证码'}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={cooldown > 0 || sendCode.isPending}
+                  onClick={() => sendCode.mutate({ phone })}
+                >
+                  {cooldown > 0 ? `${cooldown}s` : sendCode.isPending ? '发送中…' : '发送验证码'}
                 </Button>
               </div>
             </div>

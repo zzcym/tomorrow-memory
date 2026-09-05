@@ -19,10 +19,13 @@ export function getToken(): string | null {
 
 export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
+  // 通知同源其他标签页同步登录态
+  window.dispatchEvent(new Event('tm-auth-changed'));
 }
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new Event('tm-auth-changed'));
 }
 
 export function getUser(): StoredUser | null {
@@ -37,10 +40,12 @@ export function getUser(): StoredUser | null {
 
 export function setUser(user: StoredUser): void {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  window.dispatchEvent(new Event('tm-auth-changed'));
 }
 
 export function clearUser(): void {
   localStorage.removeItem(USER_KEY);
+  window.dispatchEvent(new Event('tm-auth-changed'));
 }
 
 export function isLoggedIn(): boolean {

@@ -10,14 +10,14 @@ import * as React from 'react';
 import { BookmarkPlus, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { getToken } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function WordLookup({ word }: { word: string }): React.JSX.Element {
-  const authed = !!getToken();
+  const authed = useAuthed();
   const utils = trpc.useUtils();
   const lookup = trpc.dictionary.lookupStatic.useQuery({ word, direction: 'en2zh' });
   const addWord = trpc.wordbook.add.useMutation({

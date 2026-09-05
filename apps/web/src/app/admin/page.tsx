@@ -2,7 +2,7 @@
 
 /**
  * 后台管理页
- * - 管理员登录
+ * - 管理员登录（401 → 回登录态；网络/服务错误独立提示）
  * - 统计面板：总用户数 / 今日新增 / 人均单词数
  * - 用户列表（分页）
  */
@@ -14,13 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 
 interface AdminStats {
   totalUsers: number;
@@ -44,31 +37,56 @@ const ADMIN_TOKEN_KEY = 'tm_admin_token';
 export default function AdminPage(): React.JSX.Element {
   const [token, setToken] = React.useState<string | null>(null);
   const [password, setPassword] = React.useState('');
-  const [loginOpen, setLoginOpen] = React.useState(false);
+  const [loggingIn, setLoggingIn] = React.useState(false);
   const [stats, setStats] = React.useState<AdminStats | null>(null);
   const [users, setUsers] = React.useState<AdminUser[]>([]);
   const [page, setPage] = React.useState(1);
   const [total, setTotal] = React.useState(0);
+  const [loadingPage, setLoadingPage] = React.useState(false);
   const pageSize = 20;
 
   React.useEffect(() => {
     setToken(localStorage.getItem(ADMIN_TOKEN_KEY));
   }, []);
 
+  /** 统一处理后台接口失败：401 清 token 回登录，其余 toast 提示 */
+  const handleFetchError = (t: string, status: number): void => {
+    if (status === 401) {
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      setToken(null);
+      toast.error('管理员登录已过期，请重新登录');
+    } else {
+      toast.error(`加载失败（${status}），请稍后重试`);
+    }
+    void t;
+  };
+
   const fetchStats = React.useCallback(async (t: string): Promise<void> => {
-    const r = await fetch('/api/admin/stats', { headers: { Authorization: `Bearer ${t}` } });
-    if (r.ok) setStats((await r.json()) as AdminStats);
+    try {
+      const r = await fetch('/api/admin/stats', { headers: { Authorization: `Bearer ${t}` } });
+      if (r.ok) setStats((await r.json()) as AdminStats);
+      else handleFetchError(t, r.status);
+    } catch {
+      toast.error('网络错误，无法加载统计');
+    }
   }, []);
 
   const fetchUsers = React.useCallback(
     async (t: string, p: number): Promise<void> => {
-      const r = await fetch(`/api/admin/users?page=${p}&pageSize=${pageSize}`, {
-        headers: { Authorization: `Bearer ${t}` },
-      });
-      if (r.ok) {
-        const j = (await r.json()) as { total: number; users: AdminUser[] };
-        setUsers(j.users);
-        setTotal(j.total);
+      try {
+        const r = await fetch(`/api/admin/users?page=${p}&pageSize=${pageSize}`, {
+          headers: { Authorization: `Bearer ${t}` },
+        });
+        if (r.ok) {
+          const j = (await r.json()) as { total: number; users: AdminUser[] };
+          setUsers(j.users);
+          setTotal(j.total);
+          setPage(p);
+        } else {
+          handleFetchError(t, r.status);
+        }
+      } catch {
+        toast.error('网络错误，无法加载用户列表');
       }
     },
     [pageSize],
@@ -81,19 +99,29 @@ export default function AdminPage(): React.JSX.Element {
   }, [token, fetchStats, fetchUsers]);
 
   const login = async (): Promise<void> => {
-    const r = await fetch('/api/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    if (r.ok) {
-      const j = (await r.json()) as { token: string };
-      localStorage.setItem(ADMIN_TOKEN_KEY, j.token);
-      setToken(j.token);
-      setLoginOpen(false);
-      toast.success('管理员登录成功');
-    } else {
-      toast.error('密码错误');
+    setLoggingIn(true);
+    try {
+      const r = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (r.ok) {
+        const j = (await r.json()) as { token: string };
+        localStorage.setItem(ADMIN_TOKEN_KEY, j.token);
+        setToken(j.token);
+        toast.success('管理员登录成功');
+      } else if (r.status === 429) {
+        toast.error('尝试过于频繁，请稍后再试');
+      } else if (r.status === 401) {
+        toast.error('密码错误');
+      } else {
+        toast.error(`登录失败（${r.status}），请稍后重试`);
+      }
+    } catch {
+      toast.error('网络错误，请稍后重试');
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -109,9 +137,15 @@ export default function AdminPage(): React.JSX.Element {
             <CardDescription>请输入管理密码以查看后台数据</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Input type="password" placeholder="管理密码" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && login()} />
-            <Button className="w-full" onClick={login}>
-              登录
+            <Input
+              type="password"
+              placeholder="管理密码"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void login()}
+            />
+            <Button className="w-full" onClick={() => void login()} disabled={loggingIn || !password}>
+              {loggingIn ? '登录中…' : '登录'}
             </Button>
           </CardContent>
         </Card>
@@ -193,27 +227,17 @@ export default function AdminPage(): React.JSX.Element {
             ))}
           </div>
           <div className="mt-4 flex items-center justify-between">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => { setPage((p) => p - 1); void fetchUsers(token, page - 1); }}>
+            <Button variant="outline" size="sm" disabled={page <= 1 || loadingPage} onClick={() => { setLoadingPage(true); void fetchUsers(token, page - 1).finally(() => setLoadingPage(false)); }}>
               上一页
             </Button>
             <span className="text-xs text-muted-foreground">第 {page} 页</span>
-            <Button variant="outline" size="sm" disabled={page * pageSize >= total} onClick={() => { setPage((p) => p + 1); void fetchUsers(token, page + 1); }}>
+            <Button variant="outline" size="sm" disabled={page * pageSize >= total || loadingPage} onClick={() => { setLoadingPage(true); void fetchUsers(token, page + 1).finally(() => setLoadingPage(false)); }}>
               下一页
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>管理员登录</DialogTitle>
-            <DialogDescription>请输入管理密码</DialogDescription>
-          </DialogHeader>
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <Button onClick={login}>登录</Button>
-        </DialogContent>
-      </Dialog>
       <div className="h-8" />
     </div>
   );

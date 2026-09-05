@@ -5,13 +5,14 @@
  * - 消息列表 + 输入框
  * - 打字机效果（chunk 增量渲染）
  * - HITL：Agent 意图不明确时 interrupt 反问，用户回答后 resume 继续
- * - 会话历史（最多 20 轮）
+ * - 会话历史（最多 20 轮）：threadId 持久化到 localStorage，刷新/重进不丢会话
  */
 
 import * as React from 'react';
 import { Bot, Send, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { getToken } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +27,20 @@ interface ChatMessage {
 }
 
 const WS_URL = '/ws';
+const THREAD_KEY = 'tm_chat_thread_id';
+
+/** 会话 id 持久化：刷新/重进复用同一会话（历史才拉得到） */
+function getThreadId(): string {
+  try {
+    const existing = localStorage.getItem(THREAD_KEY);
+    if (existing) return existing;
+    const created = `web-${Date.now()}`;
+    localStorage.setItem(THREAD_KEY, created);
+    return created;
+  } catch {
+    return 'web-default';
+  }
+}
 
 export default function ChatPage(): React.JSX.Element {
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
@@ -35,9 +50,9 @@ export default function ChatPage(): React.JSX.Element {
   const [pendingInterrupt, setPendingInterrupt] = React.useState(false);
   const wsRef = React.useRef<WebSocket | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [threadId] = React.useState(() => `web-${Date.now()}`);
+  const [threadId] = React.useState(getThreadId);
 
-  const authed = !!getToken();
+  const authed = useAuthed();
 
   const appendMessage = (msg: ChatMessage): void => {
     setMessages((prev) => [...prev, msg]);
@@ -46,7 +61,7 @@ export default function ChatPage(): React.JSX.Element {
   const send = (text: string, type: 'message' | 'resume' = 'message'): void => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      toast.error('连接未建立，请稍候');
+      toast.error('连接未建立，请稍候重试');
       return;
     }
     appendMessage({ id: `u-${Date.now()}`, role: 'user', content: text });
@@ -65,10 +80,21 @@ export default function ChatPage(): React.JSX.Element {
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
+    ws.onclose = () => {
+      setConnected(false);
+      // 连接断开（含服务端拒绝/网络中断）必须复位 waiting，否则输入框永久锁死
+      setWaiting(false);
+      setPendingInterrupt(false);
+    };
+    ws.onerror = () => setConnected(false);
 
     ws.onmessage = (event) => {
-      const msg = JSON.parse(String(event.data)) as Record<string, unknown>;
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(String(event.data)) as Record<string, unknown>;
+      } catch {
+        return; // 忽略非 JSON 帧
+      }
       if (msg.type === 'chunk') {
         const text = String(msg.text ?? '');
         // 打字机：累积到最新一条 assistant 消息
@@ -103,7 +129,7 @@ export default function ChatPage(): React.JSX.Element {
       }
     };
 
-    // 加载历史
+    // 加载历史（threadId 已持久化，刷新后能取回最近 20 轮）
     void (async () => {
       try {
         const r = await fetch(`/api/chat/history?threadId=${threadId}`, {

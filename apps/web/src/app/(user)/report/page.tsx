@@ -13,7 +13,7 @@ import { RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import { trpc } from '@/lib/trpc';
-import { getToken } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,16 +51,20 @@ const INSIGHT_LABEL: Record<AnalystInsight['type'], string> = {
 
 export default function ReportPage(): React.JSX.Element {
   const [period, setPeriod] = React.useState<Period>('30d');
-  const [forceRefresh, setForceRefresh] = React.useState(false);
-  const authed = !!getToken();
+  const authed = useAuthed();
 
-  const report = trpc.analyst.report.useQuery(
-    { period, refresh: forceRefresh },
-    { enabled: authed, refetchOnWindowFocus: false },
-  );
+  const report = trpc.analyst.report.useQuery({ period }, { enabled: authed, refetchOnWindowFocus: false });
+  const utils = trpc.useUtils();
+  const refresh = trpc.analyst.refresh.useMutation({
+    onSuccess: () => {
+      void utils.analyst.report.invalidate();
+      toast.success('已刷新，洞察重新生成');
+    },
+    onError: (err) => toast.error(err.message || '刷新失败，请稍后再试'),
+  });
 
   const dataset = report.data?.dataset;
-  const insights = report.data?.insights ?? [];
+  const insights = refresh.data?.insights ?? report.data?.insights ?? [];
 
   if (!authed) {
     return <p className="py-20 text-center text-muted-foreground">请先登录后查看学情分析。</p>;
@@ -90,16 +94,10 @@ export default function ReportPage(): React.JSX.Element {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => {
-              setForceRefresh(true);
-              void report.refetch().then(() => {
-                setForceRefresh(false);
-                toast.success('已刷新，洞察重新生成');
-              });
-            }}
-            disabled={report.isFetching}
+            onClick={() => refresh.mutate({ period })}
+            disabled={refresh.isPending}
           >
-            <RefreshCw className={`mr-1 h-4 w-4 ${report.isFetching ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`mr-1 h-4 w-4 ${refresh.isPending ? 'animate-spin' : ''}`} />
             刷新
           </Button>
         </div>
@@ -198,7 +196,12 @@ export default function ReportPage(): React.JSX.Element {
       ) : (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
-            {report.error?.message ?? '加载失败，请稍后重试'}
+            加载失败，请稍后重试
+            {report.isError && (
+              <Button size="sm" variant="outline" className="ml-3" onClick={() => void report.refetch()}>
+                重试
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}

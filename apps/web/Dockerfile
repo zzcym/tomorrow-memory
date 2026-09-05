@@ -21,6 +21,8 @@ COPY --from=deps /app/pnpm-lock.yaml ./
 COPY package.json pnpm-workspace.yaml ./
 COPY packages ./packages
 COPY apps/web ./apps/web
+# next.config.ts 仅在 NEXT_OUTPUT=standalone 时启用 standalone 输出，缺失会导致 runner 阶段 COPY 失败
+ENV NEXT_OUTPUT=standalone
 RUN pnpm --filter @tm/web build
 
 # ---- runner（standalone） ----
@@ -32,6 +34,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/apps/web/.next/standalone ./
 # 静态资源
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+# public 目录（robots.txt 等；已在仓库中保证存在）
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
 EXPOSE 3000

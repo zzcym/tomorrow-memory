@@ -10,10 +10,10 @@
  */
 
 import * as React from 'react';
-import { ArrowLeftRight, BookMarked, Cloud, HardDrive, PanelLeftClose, Trash2, Undo2 } from 'lucide-react';
+import { ArrowLeftRight, BookMarked, Cloud, HardDrive, PanelLeftClose, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { getToken } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -38,28 +38,30 @@ export function WordbookSidebar({
 }): React.JSX.Element | null {
   const [search, setSearch] = React.useState('');
   const [confirmClear, setConfirmClear] = React.useState(false);
-  const [pendingRemove, setPendingRemove] = React.useState<string | null>(null);
+  // 在线状态放到 effect 中读取：渲染期读 navigator 会导致 SSR/CSR 不一致
+  const [online, setOnline] = React.useState(true);
 
-  const authed = !!getToken();
+  const authed = useAuthed();
   const { data: entries, isLoading } = trpc.wordbook.list.useQuery(undefined, { enabled: authed });
   const utils = trpc.useUtils();
-  const add = trpc.wordbook.add.useMutation();
-  const remove = trpc.wordbook.remove.useMutation({
+  const add = trpc.wordbook.add.useMutation({
+    // 撤销后同步刷新列表（否则 UI 仍显示已删除）
     onSuccess: () => {
-      if (pendingRemove) {
-        toast('已删除，可撤销', {
-          action: {
-            label: '撤销',
-            onClick: () => {
-              if (pendingRemove) add.mutate({ word: pendingRemove });
-            },
-          },
-        });
-        setPendingRemove(null);
-      }
       void utils.wordbook.list.invalidate();
       void utils.review.today.invalidate();
     },
+    onError: () => toast.error('恢复失败，请稍后重试'),
+  });
+  const remove = trpc.wordbook.remove.useMutation({
+    // 用本次 mutation 的变量，快速连删多个词时各自的撤销互不串扰
+    onSuccess: (_data, variables) => {
+      toast('已删除，可撤销', {
+        action: { label: '撤销', onClick: () => add.mutate({ word: variables.word }) },
+      });
+      void utils.wordbook.list.invalidate();
+      void utils.review.today.invalidate();
+    },
+    onError: () => toast.error('删除失败，请稍后重试'),
   });
   const clearAll = trpc.wordbook.clear.useMutation({
     onSuccess: () => {
@@ -68,7 +70,19 @@ export function WordbookSidebar({
       void utils.wordbook.list.invalidate();
       void utils.review.today.invalidate();
     },
+    onError: () => toast.error('清空失败，请稍后重试'),
   });
+
+  React.useEffect(() => {
+    const sync = (): void => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    return () => {
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+    };
+  }, []);
 
   if (!authed) return null;
 
@@ -82,8 +96,8 @@ export function WordbookSidebar({
         <BookMarked className="h-4 w-4 text-primary" />
         <span className="text-sm font-semibold">单词本（{entries?.length ?? 0}）</span>
         <Badge variant="outline" className="ml-auto gap-1 text-[10px]">
-          {navigator.onLine ? <Cloud className="h-3 w-3" /> : <HardDrive className="h-3 w-3" />}
-          {navigator.onLine ? '云端' : '本地'}
+          {online ? <Cloud className="h-3 w-3" /> : <HardDrive className="h-3 w-3" />}
+          {online ? '云端' : '本地'}
         </Badge>
         {/* 位置切换（左/右） + 收起 */}
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMove} title="切换侧边栏位置">
@@ -126,10 +140,7 @@ export function WordbookSidebar({
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
-                  onClick={() => {
-                    setPendingRemove(e.word);
-                    remove.mutate({ word: e.word });
-                  }}
+                  onClick={() => remove.mutate({ word: e.word })}
                   aria-label={`删除 ${e.word}`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -174,5 +185,3 @@ function formatTime(ts: number): string {
   }
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
-
-export { Undo2 };

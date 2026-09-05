@@ -11,7 +11,7 @@ import * as React from 'react';
 import { Check, Clock, Lightbulb, Volume2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { getToken } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,9 +68,13 @@ export default function AssessPage(): React.JSX.Element {
   const [submitting, setSubmitting] = React.useState(false);
   const [lastResult, setLastResult] = React.useState<SubmitResult | null>(null);
 
-  const authed = !!getToken();
+  const authed = useAuthed();
   const utils = trpc.useUtils();
   const generate = trpc.assessment.generate.useMutation({
+    onMutate: () => {
+      // 立即进入 loading 相位：显示"生成题目中…"并禁用按钮（防连点重复生成）
+      setState((s) => ({ ...s, phase: 'loading' }));
+    },
     onSuccess: (data) => {
       setState({
         phase: 'testing',
@@ -84,7 +88,10 @@ export default function AssessPage(): React.JSX.Element {
       setShowHint(false);
       setLastResult(null);
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => {
+      toast.error(err.message);
+      setState((s) => ({ ...s, phase: 'idle' }));
+    },
   });
   const submit = trpc.assessment.submit.useMutation({
     onSuccess: (result) => {
@@ -159,7 +166,8 @@ export default function AssessPage(): React.JSX.Element {
   // ===== 结束页 =====
   if (state.phase === 'finished') {
     const correct = state.results.filter((r) => r.correct).length;
-    const rate = Math.round((correct / state.results.length) * 100);
+    // 0 题时避免 0/0 → NaN%
+    const rate = state.results.length > 0 ? Math.round((correct / state.results.length) * 100) : 0;
     const elapsed = Math.round((Date.now() - state.startTime) / 1000);
     const avgScore = state.results.reduce((s, r) => s + r.score, 0) / Math.max(1, state.results.length);
     const masteryDelta = state.results.reduce((s, r) => s + (r.stabilityAfter - r.stabilityBefore), 0);
@@ -187,8 +195,8 @@ export default function AssessPage(): React.JSX.Element {
                 <p className="text-xs text-muted-foreground">掌握度变化（S）</p>
               </div>
             </div>
-            <Button className="w-full" onClick={() => generate.mutate({ count: 5 })}>
-              再来一轮
+            <Button className="w-full" onClick={() => generate.mutate({ count: 5 })} disabled={generate.isPending}>
+              {generate.isPending ? '生成题目中…' : '再来一轮'}
             </Button>
             <Button variant="outline" className="w-full" onClick={() => setState((s) => ({ ...s, phase: 'idle' }))}>
               返回

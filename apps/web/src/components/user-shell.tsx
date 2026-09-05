@@ -8,7 +8,7 @@
 import * as React from 'react';
 import { BookMarked } from 'lucide-react';
 import { WordbookSidebar } from '@/components/wordbook-sidebar';
-import { getToken } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 
 type SidebarPosition = 'left' | 'right';
 
@@ -31,7 +31,7 @@ export function UserShell({ children }: { children: React.ReactNode }): React.JS
     position: 'left',
     collapsed: false,
   });
-  const authed = !!getToken();
+  const authed = useAuthed();
 
   React.useEffect(() => {
     setPrefs(loadPrefs());

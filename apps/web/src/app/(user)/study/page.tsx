@@ -12,7 +12,7 @@ import * as React from 'react';
 import { ArrowLeft, ArrowRight, Check, RotateCcw, Shuffle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { getToken } from '@/lib/auth';
+import { useAuthed } from '@/lib/use-auth';
 import { Flashcard, type FlashcardData } from '@/components/flashcard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,24 +45,34 @@ export default function StudyPage(): React.JSX.Element {
   const [reviewed, setReviewed] = React.useState<string[]>([]);
   const [checkinOpen, setCheckinOpen] = React.useState(false);
   const [words, setWords] = React.useState<StudyCard[]>([]);
-  const [loadedCount, setLoadedCount] = React.useState(0);
 
-  const authed = !!getToken();
+  const authed = useAuthed();
   const utils = trpc.useUtils();
-  const wordbook = trpc.wordbook.list.useQuery(undefined, { enabled: authed });
-  const reviewToday = trpc.review.today.useQuery(undefined, { enabled: authed && mode === 'fsrs' });
+  // refetchOnWindowFocus 关闭：后台重取返回新数组引用会重建牌组、丢失学习进度
+  const wordbook = trpc.wordbook.list.useQuery(undefined, {
+    enabled: authed,
+    refetchOnWindowFocus: false,
+  });
+  const reviewToday = trpc.review.today.useQuery(undefined, {
+    enabled: authed && mode === 'fsrs',
+    refetchOnWindowFocus: false,
+  });
   const checkinStatus = trpc.checkin.status.useQuery(undefined, { enabled: authed });
   const checkin = trpc.checkin.create.useMutation({
     onSuccess: (data) => {
       toast.success(`打卡成功！连续 ${data.streak} 天`);
       void utils.checkin.status.invalidate();
     },
+    onError: () => toast.error('打卡失败，请稍后重试'),
   });
-  const reviewCard = trpc.review.reviewCard.useMutation();
+  const reviewCard = trpc.review.reviewCard.useMutation({
+    // 评分丢失会让 FSRS 记忆状态与用户认知脱节，必须显式提示
+    onError: () => toast.error('评分提交失败，请稍后重试'),
+  });
 
   const dailyGoal = checkinStatus.data?.dailyGoal ?? 10;
 
-  // 根据模式构建单词序列
+  // 根据模式构建单词序列（依赖真实数据变化；refetch 已关，不会被窗口聚焦打断）
   React.useEffect(() => {
     if (!authed) return;
     let base: string[];
@@ -76,51 +86,50 @@ export default function StudyPage(): React.JSX.Element {
     setIndex(0);
     setFlipped(false);
     setReviewed([]);
-    setLoadedCount(0);
   }, [mode, authed, wordbook.data, reviewToday.data]);
 
-  // 逐个加载释义（静态查词）
+  // 逐个加载释义（静态查词）：每次补齐最早的未加载项，加载完成后 words 变化触发下一轮
+  const nextLoadingIndex = words.findIndex((w) => w.loading);
   React.useEffect(() => {
-    if (words.length === 0 || loadedCount >= words.length) return;
-    const current = words[loadedCount];
-    if (!current) return;
+    if (nextLoadingIndex < 0) return;
+    const target = words[nextLoadingIndex];
+    if (!target) return;
     let cancelled = false;
     void (async () => {
       try {
-        const resp = await fetch(`/api/lookup?word=${encodeURIComponent(current.word)}&direction=en2zh`);
+        const resp = await fetch(`/api/lookup?word=${encodeURIComponent(target.word)}&direction=en2zh`);
         const json = (await resp.json()) as LookupEn2ZhSuccess | LookupEn2ZhFallback | { error?: string };
         if (cancelled) return;
-        if ('error' in json) {
-          setWords((prev) => prev.map((w, i) => (i === loadedCount ? { ...w, loading: false } : w)));
-        } else {
-          const hit = json as LookupEn2ZhSuccess | LookupEn2ZhFallback;
-          setWords((prev) =>
-            prev.map((w, i) =>
-              i === loadedCount
-                ? {
-                    ...w,
-                    loading: false,
-                    phonetic: 'phonetic' in hit ? hit.phonetic : undefined,
-                    groups: 'groups' in hit ? hit.groups : undefined,
-                    examples: 'examples' in hit ? hit.examples.slice(0, 1) : undefined,
-                  }
-                : w,
-            ),
-          );
-        }
+        setWords((prev) =>
+          prev.map((w) => {
+            if (w.word !== target.word || !w.loading) return w;
+            if ('error' in json) return { ...w, loading: false };
+            const hit = json as LookupEn2ZhSuccess | LookupEn2ZhFallback;
+            return {
+              ...w,
+              loading: false,
+              phonetic: 'phonetic' in hit ? hit.phonetic : undefined,
+              groups: 'groups' in hit ? hit.groups : undefined,
+              examples: 'examples' in hit ? hit.examples.slice(0, 1) : undefined,
+            };
+          }),
+        );
       } catch {
         if (!cancelled) {
-          setWords((prev) => prev.map((w, i) => (i === loadedCount ? { ...w, loading: false } : w)));
+          setWords((prev) =>
+            prev.map((w) => (w.word === target.word && w.loading ? { ...w, loading: false } : w)),
+          );
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [loadedCount, words.length]);
+  }, [words, nextLoadingIndex]);
 
   const current = words[index];
 
+  const advanceRef = React.useRef<(rating?: 1 | 2 | 3 | 4) => void>(() => {});
   const advance = (rating?: 1 | 2 | 3 | 4): void => {
     if (!current) return;
     // 记录复习（FSRS 模式）
@@ -131,7 +140,6 @@ export default function StudyPage(): React.JSX.Element {
     setFlipped(false);
     if (index + 1 < words.length) {
       setIndex((i) => i + 1);
-      setLoadedCount((c) => Math.min(c + 1, words.length));
     } else {
       // 学完一轮
       if (reviewed.length + 1 >= dailyGoal && !checkinStatus.data?.checkedIn) {
@@ -142,6 +150,7 @@ export default function StudyPage(): React.JSX.Element {
       setIndex(0);
     }
   };
+  advanceRef.current = advance;
 
   const handleSwipe = (dir: 'left' | 'right'): void => {
     if (!current) return;
@@ -149,7 +158,7 @@ export default function StudyPage(): React.JSX.Element {
     advance(dir === 'left' ? 1 : 3);
   };
 
-  // 键盘快捷键
+  // 键盘快捷键（ref 持有最新回调，避免每次渲染重挂监听）
   React.useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -157,14 +166,14 @@ export default function StudyPage(): React.JSX.Element {
         e.preventDefault();
         setFlipped((f) => !f);
       } else if (e.key === 'ArrowLeft') {
-        advance(1);
+        advanceRef.current(1);
       } else if (e.key === 'ArrowRight') {
-        advance(3);
+        advanceRef.current(3);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  });
+  }, []);
 
   if (!authed) {
     return <p className="py-20 text-center text-muted-foreground">请先登录后开始背单词。</p>;
@@ -237,8 +246,8 @@ export default function StudyPage(): React.JSX.Element {
         </div>
       ) : (
         <p className="py-20 text-center text-muted-foreground">
-          {mode === 'fsrs' && (reviewToday.data?.dueToday ?? 0) === 0
-            ? '今天没有需要复习的单词 🎉'
+          {mode === 'fsrs'
+            ? '今天没有到期需要复习的单词。可切换「顺序」或「随机」模式学习全部单词'
             : '单词本为空，先去查词页添加单词吧'}
         </p>
       )}

@@ -10,10 +10,11 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Camera, Flame, LogOut, Save, Target, BookMarked } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { clearToken, clearUser, getUser, setUser } from '@/lib/auth';
+import { clearToken, clearUser, getUser, setUser, type StoredUser } from '@/lib/auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,8 +57,12 @@ function heatColor(count: number): string {
 
 export default function ProfilePage(): React.JSX.Element {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const utils = trpc.useUtils();
-  const user = getUser();
+  const [user, setUserState] = React.useState<StoredUser | null>(null);
+  React.useEffect(() => {
+    setUserState(getUser());
+  }, []);
   const profile = trpc.profile.get.useQuery(undefined, { enabled: !!user });
   const me = trpc.auth.me.useQuery(undefined, { enabled: !!user });
   const update = trpc.profile.update.useMutation({
@@ -258,7 +263,7 @@ export default function ProfilePage(): React.JSX.Element {
                   min={1}
                   max={100}
                   value={dailyGoal}
-                  onChange={(e) => setDailyGoal(Number(e.target.value))}
+                  onChange={(e) => { const v = Number(e.target.value); setDailyGoal(Number.isFinite(v) && v > 0 ? v : 0); }}
                 />
                 <Button onClick={() => update.mutate({ dailyGoal })}>
                   <Target className="mr-1 h-4 w-4" />
@@ -290,6 +295,8 @@ export default function ProfilePage(): React.JSX.Element {
             onClick={() => {
               clearToken();
               clearUser();
+              // 清掉上一账号的缓存，避免换号登录闪现旧数据
+              queryClient.clear();
               toast.success('已退出登录');
               router.push('/');
               router.refresh();
