@@ -64,6 +64,12 @@ const PRICE_PER_MT_OUTPUT: Record<string, number> = {
   'deepseek-reasoner': 2.19,
 };
 
+/** 单次 LLM 请求超时（ms）：防止挂起的请求占死调用方（SSE/WS） */
+const LLM_TIMEOUT_MS = 120_000;
+/** 结果缓存与用量记录上限（防长期运行内存无界增长） */
+const CACHE_MAX_ENTRIES = 500;
+const USAGE_MAX_ENTRIES = 5000;
+
 /** 字符数近似 token 数（中文约 1 字符/token，英文约 4 字符/token） */
 export function estimateTokens(text: string): number {
   const cjk = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) ?? []).length;
@@ -94,6 +100,8 @@ export class LlmRouter {
         model: role === 'strong' ? strongModel : 'deepseek-chat',
         temperature: role === 'classify' ? 0 : 0.7,
         maxTokens: role === 'strong' ? 4096 : 2048,
+        timeout: LLM_TIMEOUT_MS,
+        maxRetries: 1,
         configuration: {
           baseURL: this.options.deepseekBaseUrl,
         },
@@ -105,6 +113,8 @@ export class LlmRouter {
         model: this.options.fallbackModel ?? 'gpt-4o-mini',
         temperature: role === 'classify' ? 0 : 0.7,
         maxTokens: role === 'strong' ? 4096 : 2048,
+        timeout: LLM_TIMEOUT_MS,
+        maxRetries: 1,
         configuration: {
           baseURL: this.options.fallbackBaseUrl ?? 'https://api.openai.com/v1',
         },
@@ -152,57 +162,91 @@ export class LlmRouter {
     }
 
     const run = (async (): Promise<LlmCallResult> => {
-      const model = this.createModel(role);
-      const modelName = this.modelName(role);
-      const langMessages: BaseMessage[] = messages.map((m) => {
-        if (m.role === 'system') return new SystemMessage(m.content);
-        if (m.role === 'user') return new HumanMessage(m.content);
-        return new AIMessage(m.content);
-      });
       try {
-        // OTel 手动 span：记录 agent_name / input_tokens / output_tokens / latency_ms / cost_usd
-        const started = Date.now();
-        const res = await tracer.startActiveSpan(`llm.${modelName}`, async (span) => {
-          span.setAttribute('agent_name', modelName);
-          span.setAttribute('llm.role', role);
-          try {
-            const out = await model.invoke(langMessages);
-            const text = typeof out.content === 'string' ? out.content : JSON.stringify(out.content);
-            const inputTokens = estimateTokens(messages.map((m) => m.content).join('\n'));
-            const outputTokens = estimateTokens(text);
-            const costUsd = this.estimateCostUsd(modelName, inputTokens, outputTokens);
-            span.setAttributes({
-              input_tokens: inputTokens,
-              output_tokens: outputTokens,
-              latency_ms: Date.now() - started,
-              cost_usd: costUsd,
-            });
-            this.record({ model: modelName, inputTokens, outputTokens, ts: Date.now() });
-            return { text, model: modelName, inputTokens, outputTokens, cached: false };
-          } catch (err) {
-            span.recordException(err as Error);
-            throw err;
-          } finally {
-            span.end();
+        const result = await this.invokeUncached(messages, role);
+        // 只缓存成功结果：失败的 Promise 不入缓存（避免瞬时故障被永久负缓存）
+        if (this.enableCache) {
+          if (this.cache.size >= CACHE_MAX_ENTRIES) {
+            const oldest = this.cache.keys().next().value;
+            if (oldest !== undefined) this.cache.delete(oldest);
           }
-        });
-        return res;
-      } catch (err) {
-        // fallback 链：仅当主模型为 DeepSeek 且配置了备用端点时重试一次
-        if (this.options.deepseekApiKey && this.options.fallbackApiKey) {
-          const fb = this.createModel(role);
-          const fbName = this.options.fallbackModel ?? 'gpt-4o-mini';
-          const res = await fb.invoke(langMessages);
-          const text = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
-          this.record({ model: fbName, inputTokens: 0, outputTokens: estimateTokens(text), ts: Date.now() });
-          return { text, model: fbName, inputTokens: 0, outputTokens: estimateTokens(text), cached: false };
+          const settled = Promise.resolve(result);
+          this.cache.set(key, settled);
         }
+        return result;
+      } catch (err) {
+        // 失败即从缓存中移除在途 Promise，后续请求可重试
+        this.cache.delete(key);
         throw err instanceof Error ? err : new Error(String(err));
       }
     })();
 
+    // 在途 Promise 先挂到缓存上做单飞去重（并发同 key 只打一次）
     if (this.enableCache) this.cache.set(key, run);
     return run;
+  }
+
+  /** 实际发起 LLM 调用（不含缓存逻辑） */
+  private async invokeUncached(
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    role: LlmRole,
+  ): Promise<LlmCallResult> {
+    const langMessages: BaseMessage[] = messages.map((m) => {
+      if (m.role === 'system') return new SystemMessage(m.content);
+      if (m.role === 'user') return new HumanMessage(m.content);
+      return new AIMessage(m.content);
+    });
+    try {
+      return await this.invokeOnce(langMessages, role, messages);
+    } catch (err) {
+      // fallback 链：仅当主模型为 DeepSeek 且配置了备用端点时重试一次
+      if (this.options.deepseekApiKey && this.options.fallbackApiKey) {
+        const fb = this.createModel(role);
+        const fbName = this.options.fallbackModel ?? 'gpt-4o-mini';
+        const res = await fb.invoke(langMessages);
+        const text = typeof res.content === 'string' ? res.content : JSON.stringify(res.content);
+        this.record({ model: fbName, inputTokens: 0, outputTokens: estimateTokens(text), ts: Date.now() });
+        return { text, model: fbName, inputTokens: 0, outputTokens: estimateTokens(text), cached: false };
+      }
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  /** 单次模型调用（带 OTel span 与用量记录） */
+  private async invokeOnce(
+    langMessages: BaseMessage[],
+    role: LlmRole,
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  ): Promise<LlmCallResult> {
+    const model = this.createModel(role);
+    const modelName = this.modelName(role);
+    // OTel 手动 span：记录 agent_name / input_tokens / output_tokens / latency_ms / cost_usd
+    const started = Date.now();
+    const res = await tracer.startActiveSpan(`llm.${modelName}`, async (span) => {
+      span.setAttribute('agent_name', modelName);
+      span.setAttribute('llm.role', role);
+      try {
+        const out = await model.invoke(langMessages);
+        const text = typeof out.content === 'string' ? out.content : JSON.stringify(out.content);
+        const inputTokens = estimateTokens(messages.map((m) => m.content).join('\n'));
+        const outputTokens = estimateTokens(text);
+        const costUsd = this.estimateCostUsd(modelName, inputTokens, outputTokens);
+        span.setAttributes({
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          latency_ms: Date.now() - started,
+          cost_usd: costUsd,
+        });
+        this.record({ model: modelName, inputTokens, outputTokens, ts: Date.now() });
+        return { text, model: modelName, inputTokens, outputTokens, cached: false };
+      } catch (err) {
+        span.recordException(err as Error);
+        throw err;
+      } finally {
+        span.end();
+      }
+    });
+    return res;
   }
 
   /** 估算成本（USD），供 span 标签使用 */
@@ -214,6 +258,10 @@ export class LlmRouter {
 
   private record(u: UsageRecord): void {
     this.usage.push(u);
+    // 环形上限：长期运行不无界增长（统计为近似值即可）
+    if (this.usage.length > USAGE_MAX_ENTRIES) {
+      this.usage = this.usage.slice(-USAGE_MAX_ENTRIES);
+    }
   }
 
   /**

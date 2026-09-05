@@ -10,10 +10,13 @@ import type { AnalystService } from '../services/analyst.js';
 import type { CacheService } from '../services/cache.js';
 import type { LookupService } from '../services/lookup.js';
 import type { SmsService } from '../services/sms.js';
+import { checkRateLimit } from '../middleware/rate-limit.js';
 
 export interface TrpcContext {
   /** 已认证用户 id，未登录为 null */
   userId: number | null;
+  /** 客户端 IP（X-Forwarded-For 首段，反代后取真实来源；限流用） */
+  clientIp: string;
   db: AppDB;
   agentDeps: AgentDeps;
   llmRouter: LlmRouter;
@@ -36,6 +39,33 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   }
   return next({ ctx: { ...ctx, userId: ctx.userId } });
 });
+
+/** LLM/敏感端点限流：key 维度（user 或 ip）内 windowMs 窗口最多 limit 次 */
+export function rateLimit(key: string, limit: number, windowMs: number): void {
+  const result = checkRateLimit(key, limit, windowMs);
+  if (!result.ok) {
+    throw new TRPCError({
+      code: 'TOO_MANY_REQUESTS',
+      message: `操作过于频繁，请 ${result.retryAfterSeconds} 秒后再试`,
+    });
+  }
+}
+
+/** LLM 端点统一限流入口：登录用户按 user 维度，匿名按 IP 维度 */
+export function llmRateLimit(
+  ctx: TrpcContext,
+  scope: string,
+  opts: { userPerMin: number; anonPerMin: number; anonPerDay?: number },
+): void {
+  if (ctx.userId !== null) {
+    rateLimit(`user:${ctx.userId}:${scope}`, opts.userPerMin, 60_000);
+  } else {
+    rateLimit(`ip:${ctx.clientIp}:${scope}`, opts.anonPerMin, 60_000);
+    if (opts.anonPerDay !== undefined && !checkRateLimit(`ip:${ctx.clientIp}:${scope}:daily`, opts.anonPerDay, 86_400_000).ok) {
+      throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: '今日使用次数已达上限，请明天再来' });
+    }
+  }
+}
 
 export const publicProcedure = t.procedure;
 export const router = t.router;

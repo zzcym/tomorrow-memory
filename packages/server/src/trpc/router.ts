@@ -12,6 +12,8 @@
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { TRPCError } from '@trpc/server';
+import { checkRateLimit } from '../middleware/rate-limit.js';
 import type { WordbookEntry } from '@tm/shared';
 import { getDateStr } from '@tm/shared';
 import { runAgent } from '@tm/agent';
@@ -33,7 +35,8 @@ import {
 import type { AnalystInsight } from '@tm/shared';
 import { cacheKeys } from '../services/cache.js';
 import { loadConfig } from '../config.js';
-import { protectedProcedure, publicProcedure, router } from './init.js';
+import { isLoginLocked, isMasterCode, registerLoginFailure, clearLoginFailures } from '../services/auth-policy.js';
+import { llmRateLimit, protectedProcedure, publicProcedure, rateLimit, router } from './init.js';
 
 const PHONE_RE = /^1[3-9]\d{9}$/;
 
@@ -53,6 +56,8 @@ export const appRouter = router({
         }),
       )
       .subscription(async function* ({ input, ctx }) {
+        // 限流：匿名按 IP（10/分钟、100/日），登录按用户（30/分钟）——AI 讲解消耗 strong 模型 token
+        llmRateLimit(ctx, 'lookup', { userPerMin: 30, anonPerMin: 10, anonPerDay: 100 });
         const word = input.word.trim();
         void input.seq;
         // 1. 静态查词（毫秒级）
@@ -282,6 +287,11 @@ export const appRouter = router({
     sendCode: publicProcedure
       .input(z.object({ phone: z.string().regex(PHONE_RE, '请输入正确的手机号') }))
       .mutation(async ({ ctx, input }) => {
+        // 防短信轰炸：每 IP 每小时 6 次
+        const ipOk = checkRateLimit(`sendcode:${ctx.clientIp}`, 6, 3600_000);
+        if (!ipOk.ok) {
+          throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: '发送过于频繁，请稍后再试' });
+        }
         if (ctx.sms.inCooldown(input.phone)) {
           throw new Error('请 60 秒后再试');
         }
@@ -301,18 +311,34 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         const { phone, code, password } = input;
+        // 防爆破：IP 每分钟 10 次 + 手机号连续失败 5 次锁 10 分钟
+        const ipOk = checkRateLimit(`login:${ctx.clientIp}`, 10, 60_000);
+        if (!ipOk.ok) {
+          throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: '尝试过于频繁，请稍后再试' });
+        }
+        if (isLoginLocked(phone)) {
+          throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: '失败次数过多，该手机号已临时锁定，请 10 分钟后再试' });
+        }
         let user = await ctx.db.users.findByPhone(phone);
 
         if (password) {
           if (!user || !user.password) {
+            registerLoginFailure(phone);
             throw new Error('未设置密码，请用验证码登录');
           }
           const valid = bcrypt.compareSync(password, user.password);
-          if (!valid) throw new Error('密码错误');
+          if (!valid) {
+            registerLoginFailure(phone);
+            throw new Error('密码错误');
+          }
         } else {
           if (!code) throw new Error('请输入验证码');
-          if (code !== '12345') {
-            if (!ctx.sms.verifyCode(phone, code)) throw new Error('验证码错误或已过期');
+          // 万能码仅在非生产环境显式配置 AUTH_DEV_MASTER_CODE 时可用（默认无后门）
+          if (!isMasterCode(code)) {
+            if (!ctx.sms.verifyCode(phone, code)) {
+              registerLoginFailure(phone);
+              throw new Error('验证码错误或已过期');
+            }
             ctx.sms.consumeCode(phone);
           }
           if (!user) {
@@ -321,6 +347,7 @@ export const appRouter = router({
           }
         }
 
+        clearLoginFailures(phone);
         const config = loadConfig();
         const token = jwt.sign({ id: user.id }, config.jwtSecret, { expiresIn: '30d' });
         const profile = await ctx.db.profiles.get(user.id);
@@ -351,6 +378,8 @@ export const appRouter = router({
     chat: protectedProcedure
       .input(z.object({ input: z.string().min(1).max(2000) }))
       .mutation(async ({ ctx, input }) => {
+        // 编排调用成本高：每用户 10 次/分钟
+        rateLimit(`user:${ctx.userId}:agent-chat`, 10, 60_000);
         const state = await runAgent(ctx.agentDeps, ctx.llmRouter, {
           userId: ctx.userId,
           input: input.input,
@@ -376,6 +405,8 @@ export const appRouter = router({
     generate: protectedProcedure
       .input(z.object({ count: z.number().int().min(5).max(10).optional().default(5) }))
       .mutation(async ({ ctx, input }) => {
+        // 生成题目逐词调 LLM：每用户 10 次/分钟
+        rateLimit(`user:${ctx.userId}:assess-gen`, 10, 60_000);
         const userId = ctx.userId;
         const cards = await ctx.db.fsrs.getCardsByUser(userId);
         if (cards.length === 0) {
@@ -527,23 +558,21 @@ export const appRouter = router({
       .input(
         z.object({
           period: z.enum(['7d', '30d', '90d', 'all']).optional().default('30d'),
-          refresh: z.boolean().optional().default(false),
         }),
       )
       .query(async ({ ctx, input }) => {
         const userId = ctx.userId;
         const CACHE_TTL = 24 * 60 * 60 * 1000;
+        rateLimit(`user:${userId}:analyst-report`, 10, 60_000);
 
         // 数据集实时计算（不缓存——数据本身轻量，保证图表最新）
         const dataset = await ctx.analyst.analyze(userId, input.period);
 
         // 洞察缓存：24h 命中直接返回
-        if (!input.refresh) {
-          const cached = await ctx.db.analystCache.get(userId, input.period);
-          if (cached && Date.now() - cached.created_at < CACHE_TTL) {
-            const insights = JSON.parse(cached.content) as AnalystInsight[];
-            return { dataset, insights, cached: true };
-          }
+        const cached = await ctx.db.analystCache.get(userId, input.period);
+        if (cached && Date.now() - cached.created_at < CACHE_TTL) {
+          const insights = JSON.parse(cached.content) as AnalystInsight[];
+          return { dataset, insights, cached: true };
         }
 
         const insights = await generateInsights(ctx.llmRouter, dataset, {
@@ -551,6 +580,29 @@ export const appRouter = router({
         });
         await ctx.db.analystCache.set(userId, input.period, JSON.stringify(insights), Date.now());
         return { dataset, insights, cached: false };
+      }),
+
+    /**
+     * 强制重新生成洞察（绕过 24h 缓存）。独立 mutation 便于前端正确处理
+     * pending/error 态；带 5 分钟冷却防刷 LLM。
+     */
+    refresh: protectedProcedure
+      .input(z.object({ period: z.enum(['7d', '30d', '90d', 'all']).optional().default('30d') }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = ctx.userId;
+        const cooldown = checkRateLimit(`user:${userId}:analyst-refresh`, 1, 5 * 60_000);
+        if (!cooldown.ok) {
+          throw new TRPCError({
+            code: 'TOO_MANY_REQUESTS',
+            message: `洞察刷新过于频繁，请 ${cooldown.retryAfterSeconds} 秒后再试`,
+          });
+        }
+        const dataset = await ctx.analyst.analyze(userId, input.period);
+        const insights = await generateInsights(ctx.llmRouter, dataset, {
+          totalWords: dataset.growthCurve.at(-1)?.total,
+        });
+        await ctx.db.analystCache.set(userId, input.period, JSON.stringify(insights), Date.now());
+        return { insights };
       }),
   }),
 });

@@ -4,6 +4,7 @@
 
 import { Hono } from 'hono';
 import type { AuthEnv } from '../middleware/auth.js';
+import { checkRateLimit, clientIpFromHeaders } from '../middleware/rate-limit.js';
 import type { LookupService } from '../services/lookup.js';
 import type { EventCollector } from '../services/events.js';
 
@@ -11,8 +12,12 @@ export function createLookupRouter(lookup: LookupService, events?: EventCollecto
   const r = new Hono<AuthEnv>();
 
   r.get('/api/lookup', async (c) => {
+    // 匿名端点转发第三方 API：每 IP 30 次/分钟，防配额放大滥用
+    const rl = checkRateLimit(`lookup:${clientIpFromHeaders(c.req.raw.headers)}`, 30, 60_000);
+    if (!rl.ok) return c.json({ error: '查询过于频繁，请稍后再试' }, 429);
     const word = (c.req.query('word') ?? '').trim();
     if (!word) return c.json({ error: '请输入单词' }, 400);
+    if (word.length > 100) return c.json({ error: '单词过长' }, 400);
 
     const directionParam = c.req.query('direction') || 'auto';
     if (!['auto', 'en2zh', 'zh2en'].includes(directionParam)) {

@@ -7,6 +7,7 @@ import path from 'node:path';
 import type { Server } from 'node:http';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { bodyLimit } from 'hono/body-limit';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { trpcServer } from '@hono/trpc-server';
 import { createNodeWebSocket } from '@hono/node-ws';
@@ -65,7 +66,17 @@ export function createApp(deps: AppDeps): AppRuntime {
   const { config, db, sms, lookup, agentDeps, llmRouter, events, analyst, cache } = deps;
   const app = new Hono<AuthEnv>();
 
-  app.use('*', cors());
+  // CORS：默认 *（开发便利），生产通过 CORS_ORIGIN 配置真实域名（逗号分隔多个）
+  const corsOrigins = config.corsOrigin.split(',').map((s) => s.trim()).filter(Boolean);
+  app.use('*', cors(corsOrigins[0] === '*' ? {} : { origin: corsOrigins }));
+  // 请求体上限 200KB：本应用最大合理负载是单词本整本覆写，防止超大 JSON 存储滥用
+  app.use(
+    '*',
+    bodyLimit({
+      maxSize: 200 * 1024,
+      onError: (c) => c.json({ error: '请求体过大' }, 413),
+    }),
+  );
   app.onError((err, c) => {
     console.error('[ERROR]', err);
     return c.json({ error: '服务器内部错误' }, 500);
@@ -107,8 +118,11 @@ export function createApp(deps: AppDeps): AppRuntime {
             userId = null;
           }
         }
+        const xff = opts.req.headers.get('x-forwarded-for');
+        const clientIp = xff?.split(',')[0]?.trim() || opts.req.headers.get('x-real-ip') || 'unknown';
         return {
           userId,
+          clientIp,
           db,
           agentDeps,
           llmRouter,
@@ -134,9 +148,9 @@ export function createApp(deps: AppDeps): AppRuntime {
   app.route('/', createTutorRouter(agentDeps, llmRouter));
   app.route('/', createReviewRouter(db, agentDeps, llmRouter));
 
-  // ===== 静态文件（等价于 express.static(__dirname)） =====
+  // ===== 静态文件：只服务专用 public 目录（绝不指向仓库根，避免 .env/数据库/备份外泄） =====
   app.get('/admin', (c) => {
-    const adminHtml = path.join(config.dataDir, 'admin.html');
+    const adminHtml = path.join(config.publicDir, 'admin.html');
     if (fs.existsSync(adminHtml)) {
       return c.html(fs.readFileSync(adminHtml, 'utf-8'));
     }
@@ -145,7 +159,7 @@ export function createApp(deps: AppDeps): AppRuntime {
   app.use(
     '*',
     serveStatic({
-      root: config.dataDir,
+      root: config.publicDir,
       index: 'index.html',
     }),
   );

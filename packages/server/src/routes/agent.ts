@@ -12,7 +12,11 @@ import type { AgentDeps, AgentRunInput, LlmRouter } from '@tm/agent';
 import { runAgent } from '@tm/agent';
 import type { AppConfig } from '../config.js';
 import { auth, type AuthEnv } from '../middleware/auth.js';
+import { checkRateLimit } from '../middleware/rate-limit.js';
 import type { LookupService } from '../services/lookup.js';
+
+/** 编排输入长度上限（与 tRPC agent.chat 对齐） */
+const MAX_INPUT = 2000;
 
 export function createAgentRouter(
   deps: AgentDeps,
@@ -24,6 +28,9 @@ export function createAgentRouter(
 
   // 完整编排（JSON）
   r.post('/api/agent', auth, async (c) => {
+    // LLM 编排成本高：每用户 10 次/分钟
+    const rl = checkRateLimit(`user:${c.get('userId')}:agent`, 10, 60_000);
+    if (!rl.ok) return c.json({ error: `操作过于频繁，请 ${rl.retryAfterSeconds} 秒后再试` }, 429);
     const body = (await c.req.json().catch(() => ({}))) as {
       input?: unknown;
       word?: unknown;
@@ -32,6 +39,9 @@ export function createAgentRouter(
     const input = body.input;
     if (typeof input !== 'string' || !input.trim()) {
       return c.json({ error: '请输入内容' }, 400);
+    }
+    if (input.length > MAX_INPUT) {
+      return c.json({ error: `输入过长（最多 ${MAX_INPUT} 字）` }, 400);
     }
     const runInput: AgentRunInput = {
       userId: c.get('userId'),
@@ -59,9 +69,12 @@ export function createAgentRouter(
 
   // SSE 流式：先返回静态查词（毫秒级），再流式追加 LLM 教学内容
   r.post('/api/agent/stream', auth, async (c) => {
+    const rl = checkRateLimit(`user:${c.get('userId')}:agent-stream`, 10, 60_000);
+    if (!rl.ok) return c.json({ error: `操作过于频繁，请 ${rl.retryAfterSeconds} 秒后再试` }, 429);
     const body = (await c.req.json().catch(() => ({}))) as { input?: unknown };
     const input = typeof body.input === 'string' ? body.input.trim() : '';
     if (!input) return c.json({ error: '请输入内容' }, 400);
+    if (input.length > MAX_INPUT) return c.json({ error: `输入过长（最多 ${MAX_INPUT} 字）` }, 400);
 
     return streamSSE(c, async (stream) => {
       const userId = c.get('userId');

@@ -2,6 +2,8 @@
  * 验证码存储与短信发送（与 server.js 行为一致，内存存储，重启清空）
  */
 
+import { randomInt } from 'node:crypto';
+
 interface CodeRecord {
   code: string;
   expires: number;
@@ -11,7 +13,8 @@ interface CodeRecord {
 const codeStore = new Map<string, CodeRecord>();
 
 function generateCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  // 密码学安全随机：Math.random 可预测
+  return String(randomInt(100000, 1000000));
 }
 
 function storeCode(phone: string, code: string): void {
@@ -49,7 +52,10 @@ function inCooldown(phone: string): boolean {
  * TODO: 替换为真实短信服务商（阿里云/腾讯云/云片），见 server_prod.js 注释示例
  */
 async function sendSMS(phone: string, code: string): Promise<boolean> {
-  console.log(`[DEV] 验证码发送至 ${phone}: ${code}`);
+  // 真实短信商接入前：验证码仅允许出现在非生产日志（生产由短信商下发，绝不落日志）
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[DEV] 验证码发送至 ${phone}: ${code}`);
+  }
   return true;
 }
 

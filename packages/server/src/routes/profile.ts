@@ -33,6 +33,13 @@ export function createProfileRouter(db: AppDB): Hono<AuthEnv> {
       daily_goal?: unknown;
     };
     const userId = c.get('userId');
+    // 长度校验（与 tRPC 侧对齐）
+    if (body.nickname !== undefined && (typeof body.nickname !== 'string' || body.nickname.length > 30)) {
+      return c.json({ error: '昵称过长' }, 400);
+    }
+    if (body.avatar !== undefined && (typeof body.avatar !== 'string' || body.avatar.length > 500)) {
+      return c.json({ error: '头像数据过长' }, 400);
+    }
     const current = await db.profiles.ensure(userId);
     await db.profiles.update(
       userId,

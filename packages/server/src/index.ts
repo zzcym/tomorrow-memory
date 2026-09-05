@@ -41,6 +41,22 @@ async function main(): Promise<void> {
     console.error('[FATAL] JWT_SECRET 未配置，请在 .env 中设置 JWT_SECRET');
     process.exit(1);
   }
+  // 弱密钥防线：生产环境短密钥直接拒绝；开发环境告警
+  if (config.jwtSecret.length < 16) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[FATAL] JWT_SECRET 强度不足（至少 16 字符），生产环境拒绝启动');
+      process.exit(1);
+    }
+    console.warn('[WARN] JWT_SECRET 强度不足（至少 16 字符），仅限开发环境使用');
+  }
+  // 管理后台密码：生产环境必须显式配置
+  if (!config.adminPassword) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[FATAL] ADMIN_PASSWORD 未配置，生产环境拒绝启动（管理后台无密码保护）');
+      process.exit(1);
+    }
+    console.warn('[WARN] ADMIN_PASSWORD 未配置，开发环境回落默认口令 admin888（生产将拒绝启动）');
+  }
 
   // ===== OpenTelemetry（Phase 5）：先于一切启动，自动 instrument HTTP/PG/Redis =====
   initTracing({
@@ -137,6 +153,15 @@ async function main(): Promise<void> {
   }
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+  // 进程级兜底：遗漏的 promise rejection / 未捕获异常只记日志不静默崩溃
+  // （配合 pg pool 的 error 监听，避免单个连接抖动击穿整个服务）
+  process.on('unhandledRejection', (reason) => {
+    console.error('[PROCESS] Unhandled rejection:', reason);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('[PROCESS] Uncaught exception:', err);
+  });
 }
 
 main().catch((err) => {

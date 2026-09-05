@@ -47,16 +47,17 @@ function check(name: string, ok: boolean, detail = ''): void {
   check('GET /admin', r.status === 200 && text.includes('admin'), `status=${r.status}`);
 }
 
-// 2. 登录（万能验证码 12345 自动注册）
+// 2. 登录（dev 后门码：需服务端以非生产模式设置 AUTH_DEV_MASTER_CODE；生产无此后门）
+const MASTER_CODE = process.env.AUTH_DEV_MASTER_CODE ?? '12345';
 const phone = '139' + String(Date.now()).slice(-8);
 let token: string | undefined;
 {
-  const r = await req('POST', '/api/login', { body: { phone, code: '12345' } });
+  const r = await req('POST', '/api/login', { body: { phone, code: MASTER_CODE } });
   token = typeof r.json?.token === 'string' ? r.json.token : undefined;
   check(
     'POST /api/login',
     r.status === 200 && !!token && r.json?.phone === phone,
-    `status=${r.status} hasPassword=${String(r.json?.hasPassword)}`,
+    `status=${r.status} hasPassword=${String(r.json?.hasPassword)}（若 401：请确认服务端 .env 设置了 AUTH_DEV_MASTER_CODE）`,
   );
 }
 

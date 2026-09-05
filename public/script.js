@@ -373,7 +373,7 @@ function updateLoginUI(phone, avatar, nickname) {
     // Avatar
     const avatarEl = userMenuBtn.querySelector('.user-avatar');
     if (avatar) {
-      avatarEl.innerHTML = '<img src="' + avatar + '" style="width:22px;height:22px;border-radius:50%;object-fit:cover;vertical-align:middle">';
+      avatarEl.innerHTML = '<img src="' + escapeHTML(avatar) + '" alt="avatar" style="width:22px;height:22px;border-radius:50%;object-fit:cover;vertical-align:middle">';
     } else {
       avatarEl.textContent = '\u{1F464}';
     }

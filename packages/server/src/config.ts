@@ -52,8 +52,12 @@ export interface AppConfig {
   dictDbPath: string;
   examplesDbPath: string;
   ecDictPath: string;
-  /** 数据文件所在目录（前端静态文件、data.db 等） */
+  /** 数据文件所在目录（data.db 等；不再作为静态根） */
   dataDir: string;
+  /** 静态文件根目录（仅该目录对外可读；绝不指向含 .env / 数据库 / 备份的目录） */
+  publicDir: string;
+  /** CORS 允许来源（多个用逗号分隔；默认 * 便于开发） */
+  corsOrigin: string;
 }
 
 function str(name: string, fallback = ''): string {
@@ -79,9 +83,10 @@ export function loadConfig(): AppConfig {
       'postgresql://tm_user:tm_pass_2024@localhost:5432/tomorrow_memory',
     ),
     sqlitePath: str('SQLITE_PATH', path.join(dataDir, 'data.db')),
-    youdaoAppKey: str('YOUDAO_APP_KEY', '115fb00277c7315b'),
-    youdaoSecret: str('YOUDAO_SECRET', 'EI7VnZNuHkft9z9ihlVXnInCV09Kjc7D'),
-    adminPassword: str('ADMIN_PASSWORD', 'admin888'),
+    // 有道凭据不再提供代码默认值（历史默认值已泄漏进 git，需在有道后台轮换）
+    youdaoAppKey: str('YOUDAO_APP_KEY', ''),
+    youdaoSecret: str('YOUDAO_SECRET', ''),
+    adminPassword: str('ADMIN_PASSWORD', ''),
     deepseekApiKey: str('DEEPSEEK_API_KEY', ''),
     deepseekBaseUrl: str('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
     embeddingApiKey: str('EMBEDDING_API_KEY', ''),
@@ -97,10 +102,18 @@ export function loadConfig(): AppConfig {
     examplesDbPath: str('EXAMPLES_DB_PATH', path.join(dataDir, 'examples.db')),
     ecDictPath: str('EC_DICT_PATH', path.join(dataDir, 'ec-cedict.json')),
     dataDir,
+    publicDir: str('PUBLIC_DIR', path.join(PROJECT_ROOT, 'public')),
+    corsOrigin: str('CORS_ORIGIN', '*'),
   };
 
   if (config.dbDriver === 'pg' && config.databaseUrl === '') {
     throw new Error('DATABASE_URL 未配置（DB_DRIVER=pg 时必填）');
+  }
+
+  // 防线：静态根绝不允许指向仓库根（否则 .env / 数据库 / 备份会被对外下载）
+  const publicReal = path.resolve(config.publicDir);
+  if (publicReal === path.resolve(PROJECT_ROOT)) {
+    throw new Error('PUBLIC_DIR 不能指向仓库根目录（会泄漏 .env / 数据库 / 备份），请设置为专用子目录');
   }
 
   return config;

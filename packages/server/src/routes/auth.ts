@@ -9,12 +9,25 @@ import type { AppDB } from '../db/types.js';
 import type { SmsService } from '../services/sms.js';
 import { loadConfig } from '../config.js';
 import { auth, type AuthEnv } from '../middleware/auth.js';
+import { clientIpFromHeaders } from '../middleware/rate-limit.js';
+import {
+  checkLoginIpLimit,
+  checkSendCodeIpLimit,
+  clearLoginFailures,
+  isLoginLocked,
+  isMasterCode,
+  registerLoginFailure,
+} from '../services/auth-policy.js';
 
 export function createAuthRouter(db: AppDB, sms: SmsService): Hono<AuthEnv> {
   const r = new Hono<AuthEnv>();
 
   // 发送验证码
   r.post('/api/send-code', async (c) => {
+    const ip = clientIpFromHeaders(c.req.raw.headers);
+    if (!checkSendCodeIpLimit(ip)) {
+      return c.json({ error: '发送过于频繁，请稍后再试' }, 429);
+    }
     const body = await c.req.json().catch(() => ({}));
     const phone = (body as { phone?: unknown }).phone;
     if (typeof phone !== 'string' || !/^1[3-9]\d{9}$/.test(phone)) {
@@ -39,6 +52,10 @@ export function createAuthRouter(db: AppDB, sms: SmsService): Hono<AuthEnv> {
 
   // 登录（验证码或密码）
   r.post('/api/login', async (c) => {
+    const ip = clientIpFromHeaders(c.req.raw.headers);
+    if (!checkLoginIpLimit(ip)) {
+      return c.json({ error: '尝试过于频繁，请稍后再试' }, 429);
+    }
     const body = (await c.req.json().catch(() => ({}))) as {
       phone?: unknown;
       code?: unknown;
@@ -47,20 +64,31 @@ export function createAuthRouter(db: AppDB, sms: SmsService): Hono<AuthEnv> {
     const phone = body.phone;
     if (typeof phone !== 'string') return c.json({ error: '请输入手机号' }, 400);
     if (!/^1[3-9]\d{9}$/.test(phone)) return c.json({ error: '手机号格式不正确' }, 400);
+    if (isLoginLocked(phone)) {
+      return c.json({ error: '失败次数过多，该手机号已临时锁定，请 10 分钟后再试' }, 429);
+    }
 
     let user = await db.users.findByPhone(phone);
 
     if (typeof body.password === 'string' && body.password) {
       if (!user || !user.password) {
+        registerLoginFailure(phone);
         return c.json({ error: '未设置密码，请用验证码登录' }, 401);
       }
       const valid = bcrypt.compareSync(body.password, user.password);
-      if (!valid) return c.json({ error: '密码错误' }, 401);
+      if (!valid) {
+        registerLoginFailure(phone);
+        return c.json({ error: '密码错误' }, 401);
+      }
     } else {
       const code = body.code;
       if (typeof code !== 'string' || !code) return c.json({ error: '请输入验证码' }, 400);
-      if (code !== '12345') {
-        if (!sms.verifyCode(phone, code)) return c.json({ error: '验证码错误或已过期' }, 401);
+      // 万能码仅在非生产环境显式配置 AUTH_DEV_MASTER_CODE 时可用（默认无后门）
+      if (!isMasterCode(code)) {
+        if (!sms.verifyCode(phone, code)) {
+          registerLoginFailure(phone);
+          return c.json({ error: '验证码错误或已过期' }, 401);
+        }
         sms.consumeCode(phone);
       }
       if (!user) {
@@ -69,6 +97,7 @@ export function createAuthRouter(db: AppDB, sms: SmsService): Hono<AuthEnv> {
       }
     }
 
+    clearLoginFailures(phone);
     const config = loadConfig();
     const token = jwt.sign({ id: user.id }, config.jwtSecret, { expiresIn: '30d' });
     const profile = await db.profiles.get(user.id);
