@@ -18,7 +18,7 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/pnpm-lock.yaml ./
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/web ./apps/web
 # next.config.ts 仅在 NEXT_OUTPUT=standalone 时启用 standalone 输出，缺失会导致 runner 阶段 COPY 失败

@@ -20,7 +20,7 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/pnpm-lock.yaml ./
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages ./packages
 RUN pnpm --filter @tm/server build
 
