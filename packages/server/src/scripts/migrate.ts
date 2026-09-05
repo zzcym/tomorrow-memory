@@ -138,6 +138,7 @@ async function migrateLegacyToPg(dbPath: string): Promise<void> {
     }
   }
 
+  await resetUserSequence(db);
   await db.close();
   console.log('[Migrate] 用户数据迁移完成');
 }
@@ -163,6 +164,19 @@ async function insertUserWithId(
       await db.createUser(u.phone, u.created_at);
     }
   }
+}
+
+/** 显式 id 插入后必须重置序列，否则迁移后第一个新用户注册撞主键（注册功能瘫痪） */
+async function resetUserSequence(db: Awaited<ReturnType<typeof createAppDB>>): Promise<void> {
+  const pool = (db as unknown as { pool?: pg.Pool }).pool;
+  if (!pool) return;
+  await pool.query(`
+    SELECT setval(
+      pg_get_serial_sequence('users', 'id'),
+      GREATEST((SELECT COALESCE(MAX(id), 0) FROM users), 1)
+    )
+  `);
+  console.log('[Migrate] users_id_seq 序列已重置');
 }
 
 function safeParse(text: string): WordbookEntry[] {

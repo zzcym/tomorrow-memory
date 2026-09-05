@@ -22,6 +22,10 @@ export function createAppDB(reuse = true): AppDB {
   let db: AppDB;
 
   if (config.dbDriver === 'pg') {
+    // pg 驱动默认把 int8(BIGINT) 返回为字符串：时间戳列（created_at 等）经 new Date(字符串)
+    // 会得到 Invalid Date 并在 toISOString() 处抛 "Invalid time value"。
+    // 本应用时间戳均为毫秒（远小于 2^53），全局按 Number 解析。
+    pg.types.setTypeParser(20, (v: string) => Number(v));
     // Phase 6：连接池调优（max=20 可配置，idle 30s 回收）
     const poolMax = Number(process.env.PG_POOL_MAX) || 20;
     const pool = new pg.Pool({
@@ -29,6 +33,10 @@ export function createAppDB(reuse = true): AppDB {
       max: poolMax,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
+    });
+    // 空闲连接出错（PG 重启/网络抖动）若无人监听会以未捕获异常击穿进程
+    pool.on('error', (err) => {
+      console.warn('[DB] PostgreSQL 连接池错误（空闲客户端）:', err.message);
     });
     db = new PostgresAppDB(pool);
   } else {

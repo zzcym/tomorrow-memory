@@ -25,7 +25,9 @@ export class RedisService {
         lazyConnect: true,
         maxRetriesPerRequest: 1,
         enableOfflineQueue: false,
-        retryStrategy: (times) => (times > 3 ? null : Math.min(times * 200, 1000)),
+        // 永续重连（指数退避，上限 30s）：Redis 抖动恢复后自动回到可用态，
+        // 期间各方法按 available=false 走内存降级，不影响主流程
+        retryStrategy: (times) => Math.min(times * 500, 30_000),
       });
       // 必须监听 error，否则 ioredis 的 error 事件会变成 unhandled 异常导致进程崩溃
       this.client.on('error', (err: Error) => {

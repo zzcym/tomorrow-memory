@@ -123,8 +123,9 @@ export class AnalystService {
     // 1. 词汇增长（按 created_at 天）
     const byDay = new Map<string, number>();
     for (const c of cards) {
-      if (c.created_at >= sinceMs) {
-        const d = new Date(c.created_at).toISOString().slice(0, 10);
+      const createdAt = Number(c.created_at);
+      if (Number.isFinite(createdAt) && createdAt >= sinceMs) {
+        const d = new Date(createdAt).toISOString().slice(0, 10);
         byDay.set(d, (byDay.get(d) ?? 0) + 1);
       }
     }
@@ -137,8 +138,9 @@ export class AnalystService {
     // 2. 复习效率（按 last_review 天）
     const reviewByDay = new Map<string, number>();
     for (const c of cards) {
-      if (c.last_review !== null && c.last_review >= sinceMs) {
-        const d = new Date(c.last_review).toISOString().slice(0, 10);
+      const lastReview = Number(c.last_review);
+      if (Number.isFinite(lastReview) && lastReview >= sinceMs) {
+        const d = new Date(lastReview).toISOString().slice(0, 10);
         reviewByDay.set(d, (reviewByDay.get(d) ?? 0) + 1);
       }
     }
@@ -154,7 +156,9 @@ export class AnalystService {
     // 3. 学习时段（按 updated_at 近似）
     const heatMap = new Map<string, number>();
     for (const c of cards) {
-      const d = new Date(c.updated_at);
+      const updatedAt = Number(c.updated_at);
+      if (!Number.isFinite(updatedAt)) continue;
+      const d = new Date(updatedAt);
       const key = `${d.getDay()}:${d.getHours()}`;
       heatMap.set(key, (heatMap.get(key) ?? 0) + 1);
     }

@@ -78,6 +78,7 @@ export class ClickHouseClient {
     }
     const resp = await fetch(`${this.base}/`, {
       method: 'POST',
+      signal: AbortSignal.timeout(8000),
       headers: { 'Content-Type': 'text/plain' },
       body: `${body} FORMAT JSONEachRow`,
     });
@@ -99,6 +100,7 @@ export class ClickHouseClient {
     const body = rows.map((r) => JSON.stringify(r)).join('\n');
     const resp = await fetch(`${this.base}/?query=${encodeURIComponent(`INSERT INTO ${this.database}.${table}`)}`, {
       method: 'POST',
+      signal: AbortSignal.timeout(8000),
       headers: { 'Content-Type': 'application/x-ndjson' },
       body,
     });

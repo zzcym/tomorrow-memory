@@ -36,6 +36,7 @@ export function createYoudaoClient(config: AppConfig): YoudaoClient {
       const sign = crypto.createHash('sha256').update(input).digest('hex');
       const resp = await fetch('https://openapi.youdao.com/api', {
         method: 'POST',
+        signal: AbortSignal.timeout(5000),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           q,

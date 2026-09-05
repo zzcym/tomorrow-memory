@@ -485,6 +485,8 @@ export class SqliteAppDB implements AppDB {
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA wal_autocheckpoint = 100');
     this.db.exec('PRAGMA synchronous = NORMAL');
+    // SQLite 默认不启用外键约束：不开启则 DDL 里的 FOREIGN KEY 全部不生效（与 PG 行为分叉）
+    this.db.exec('PRAGMA foreign_keys = ON');
     for (const ddl of DDL) {
       this.db.exec(ddl);
     }

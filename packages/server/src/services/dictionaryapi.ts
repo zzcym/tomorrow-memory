@@ -23,7 +23,9 @@ export function createDictionaryApiClient(): DictionaryApiClient {
       const hit = cache.get(cacheKey);
       if (hit) return hit;
       try {
-        const resp = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word));
+        const resp = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word), {
+          signal: AbortSignal.timeout(5000),
+        });
         if (!resp.ok) throw new Error('not found');
         const data = (await resp.json()) as Array<{
           phonetic?: string;
