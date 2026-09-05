@@ -1,0 +1,22 @@
+# ===== Docker 构建上下文排除(上下文只保留源码,镜像内自行安装依赖) =====
+**/node_modules
+**/dist
+**/.next
+**/tsconfig.tsbuildinfo
+**/*.log
+
+# 版本与本机数据(绝不进镜像)
+.git
+.github
+pgdata
+pgsql
+backups
+_archive
+*.db
+*.db-shm
+*.db-wal
+*.zip
+
+# 无关目录
+desktop-agenda
+gui-test-screenshots
