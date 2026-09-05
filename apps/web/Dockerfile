@@ -4,14 +4,16 @@ FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
 WORKDIR /app
 
-# ---- deps ----
+# ---- deps:全量安装 ----
+# web 的类型链 import type { AppRouter } from '@tm/server' 会传递引用 server→agent
+# 源码及其依赖(Next build 会做类型检查),因此不能只装 --filter @tm/web...
 FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/agent/package.json packages/agent/
 COPY packages/server/package.json packages/server/
 COPY apps/web/package.json apps/web/
-RUN pnpm install --frozen-lockfile --filter @tm/web...
+RUN pnpm install --frozen-lockfile
 
 # ---- build ----
 FROM base AS builder
