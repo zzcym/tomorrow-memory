@@ -277,11 +277,28 @@ function renderMe() {
     function showLoginErr(m) { const el = $('loginErr'); el.textContent = m; el.classList.remove('hidden'); }
     return;
   }
-  // 已登录
+  // 已登录:骨架(数据异步填充)
   body.innerHTML = `
+    <div class="card" id="meHead">
+      <div class="me-head-row">
+        <button class="avatar" id="avatarBtn" aria-label="更换头像">${auth.nickname ? esc(auth.nickname.slice(0, 1).toUpperCase()) : '?'}</button>
+        <div class="me-head-info">
+          <div class="me-name" id="meName">${esc(auth.nickname || auth.phone || '用户')}</div>
+          <div class="me-phone">${esc(auth.phone || '')}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="editProfileBtn">编辑</button>
+      </div>
+      <input type="file" id="avatarFile" accept="image/*" class="hidden"/>
+      <p class="hint" id="meStats" style="margin-top:10px">加载统计中…</p>
+    </div>
     <div class="card">
-      <h3>${esc(auth.nickname || auth.phone || '用户')}</h3>
-      <p class="hint">手机号 ${esc(auth.phone || '-')}<br/>数据与 tmword.xyz 网页版实时同步</p>
+      <h3>学习热力图</h3>
+      <p class="hint" style="margin-bottom:8px" id="heatHint">近 52 周打卡记录</p>
+      <div class="heatmap-scroll"><div class="heatmap" id="heatmap"><span class="hint">加载中…</span></div></div>
+      <div class="heat-legend"><span>少</span>
+        <i style="background:#e8f0ec"></i><i style="background:#bfe0d4"></i><i style="background:#6fb9a4"></i><i style="background:#2f8d76"></i><i style="background:#0f6b5c"></i>
+        <span>多</span>
+      </div>
     </div>
     <div class="card">
       <button id="logoutBtn" class="btn btn-ghost" style="width:100%;color:var(--danger);border-color:var(--danger)">退出登录</button>
@@ -292,6 +309,91 @@ function renderMe() {
     refreshReviewBadge();
     toast('已退出');
   });
+
+  // 拉档案:昵称/头像/统计/热力图数据
+  (async () => {
+    let pf;
+    try { pf = await API.profile(); } catch (e) { $('meStats').textContent = '统计加载失败:' + e.message; return; }
+    const head = $('meHead'); if (!head) return;
+    if (pf.avatar) {
+      const av = $('avatarBtn');
+      av.style.backgroundImage = `url("${pf.avatar}")`;
+      av.style.backgroundSize = 'cover';
+      av.textContent = '';
+    }
+    if (pf.nickname) $('meName').textContent = pf.nickname;
+    $('meStats').innerHTML = `单词本 <b>${pf.totalWords}</b> 词 · 累计复习 <b>${pf.reviewDays}</b> 天 · 每日目标 <b>${pf.daily_goal}</b> 词`;
+    renderHeatmap($('heatmap'), pf.reviewDates || []);
+  })();
+
+  // 编辑昵称
+  $('editProfileBtn').addEventListener('click', () => {
+    const name = $('meName').textContent === (API.getAuth().phone) ? '' : $('meName').textContent;
+    const v = prompt('昵称(最长 30 字)', name || '');
+    if (v === null) return;
+    const nv = v.trim().slice(0, 30);
+    API.profileUpdate({ nickname: nv }).then(() => {
+      API.setAuth(API.getToken(), API.getAuth().phone, nv);
+      renderMe();
+      toast('昵称已更新');
+    }).catch((e) => toast(e.message, true));
+  });
+
+  // 更换头像:系统文件选择 → canvas 压缩 512px JPEG → PUT profile
+  $('avatarBtn').addEventListener('click', () => $('avatarFile').click());
+  $('avatarFile').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, size / Math.max(img.width, img.height));
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        toast('上传中…');
+        API.profileUpdate({ avatar: dataUrl }).then(() => {
+          const av = $('avatarBtn');
+          av.style.backgroundImage = `url("${dataUrl}")`;
+          av.style.backgroundSize = 'cover';
+          av.textContent = '';
+          toast('头像已更新');
+        }).catch((er) => toast(er.message, true));
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+}
+
+/** 52 周打卡热力图(与网页版同口径:reviewDates 按日计数,周日对齐) */
+function renderHeatmap(el, reviewDates) {
+  const counts = new Map();
+  for (const d of reviewDates) counts.set(d, (counts.get(d) ?? 0) + 1);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(today.getTime() - 51 * 7 * 86400000);
+  start.setDate(start.getDate() - start.getDay()); // 对齐周日
+  const levels = ['#e8f0ec', '#bfe0d4', '#6fb9a4', '#2f8d76', '#0f6b5c'];
+  let html = '';
+  for (let w = 0; w < 53; w++) {
+    html += '<div class="hm-week">';
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(start.getTime() + (w * 7 + d) * 86400000);
+      const key = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
+      const c = counts.get(key) ?? 0;
+      const lv = c === 0 ? 0 : c === 1 ? 1 : c <= 3 ? 2 : c <= 6 ? 3 : 4;
+      const future = day > today;
+      html += `<i class="hm-cell${future ? ' future' : ''}" style="background:${future ? 'transparent' : levels[lv]}" title="${key}${c ? ' · ' + c + ' 次' : ''}"></i>`;
+    }
+    html += '</div>';
+  }
+  el.innerHTML = html;
 }
 
 /* ================= 单词本 ================= */
@@ -526,6 +628,11 @@ async function submitRate(rating) {
 
 function renderReviewDone(emptyQueue) {
   const s = RV.stats;
+  // 自动打卡(已打卡则服务端幂等忽略;失败静默,不打扰)
+  if (API.getToken()) {
+    API.checkinStatus().then((cs) => { if (!cs.checkedIn) return API.checkin(); })
+      .then(() => {}).catch(() => {});
+  }
   $('reviewBody').innerHTML = `
     <div class="rv-done">
       <div class="big">🌱</div>

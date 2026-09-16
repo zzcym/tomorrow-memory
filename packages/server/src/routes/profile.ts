@@ -37,7 +37,8 @@ export function createProfileRouter(db: AppDB): Hono<AuthEnv> {
     if (body.nickname !== undefined && (typeof body.nickname !== 'string' || body.nickname.length > 30)) {
       return c.json({ error: '昵称过长' }, 400);
     }
-    if (body.avatar !== undefined && (typeof body.avatar !== 'string' || body.avatar.length > 500)) {
+    if (body.avatar !== undefined && (typeof body.avatar !== 'string' || body.avatar.length > 200_000)) {
+      // 200K 字符 ≈ 150KB 图片(base64);客户端压缩到 512px JPEG,网页版 1.5MB 校验远超此值属异常
       return c.json({ error: '头像数据过长' }, 400);
     }
     const current = await db.profiles.ensure(userId);

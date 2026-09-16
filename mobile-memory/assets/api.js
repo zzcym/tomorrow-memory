@@ -205,7 +205,9 @@ const API = (() => {
 
   // ===== 打卡/档案 =====
   const checkinStatus = () => req('GET', '/api/checkin/status', undefined, true);
+  const checkin = () => req('POST', '/api/checkin', {}, true);
   const profile = () => req('GET', '/api/profile', undefined, true);
+  const profileUpdate = (patch) => req('PUT', '/api/profile', patch, true);
 
   return {
     LS, getToken, setAuth, getAuth, setOn401,
@@ -213,7 +215,7 @@ const API = (() => {
     lookup, lookupCache,
     recentList, recentAdd, recentClear,
     wbCache, wbLocalAdd, wbLocalRemove, wbLocalClear, wbSync, wbQueue,
-    reviewToday, reviewCard, checkinStatus, profile,
+    reviewToday, reviewCard, checkinStatus, checkin, profile, profileUpdate,
   };
 })();
 

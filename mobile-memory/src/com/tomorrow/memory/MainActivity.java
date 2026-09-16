@@ -1,7 +1,9 @@
 package com.tomorrow.memory;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
@@ -12,6 +14,8 @@ public class MainActivity extends Activity {
     private WebView web;
     private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
     private String launchFocus = "";
+    private android.webkit.ValueCallback<Uri[]> fileUploadCallback;
+    private static final int REQ_FILE_CHOOSER = 2001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -25,6 +29,27 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         web.setBackgroundColor(0xFFFFFFFF);
+        // 头像上传:WebView <input type=file> → 系统文件选择器
+        web.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, android.webkit.ValueCallback<Uri[]> callback,
+                                             android.webkit.WebChromeClient.FileChooserParams params) {
+                if (fileUploadCallback != null) {
+                    fileUploadCallback.onReceiveValue(null);
+                }
+                fileUploadCallback = callback;
+                try {
+                    Intent in = new Intent(Intent.ACTION_GET_CONTENT);
+                    in.addCategory(Intent.CATEGORY_OPENABLE);
+                    in.setType("image/*");
+                    startActivityForResult(Intent.createChooser(in, "选择头像图片"), REQ_FILE_CHOOSER);
+                } catch (Exception e) {
+                    fileUploadCallback = null;
+                    return false;
+                }
+                return true;
+            }
+        });
         web.addJavascriptInterface(new Bridge(), "AndroidBridge");
         // 页面就绪后把 SharedPreferences 里的 token 回灌 WebView(localStorage 可能被系统清理)
         web.setWebViewClient(new android.webkit.WebViewClient() {
@@ -41,6 +66,18 @@ public class MainActivity extends Activity {
         });
         setContentView(web);
         web.loadUrl("file:///android_asset/index.html");
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_FILE_CHOOSER && fileUploadCallback != null) {
+            Uri[] results = (resultCode == RESULT_OK && data != null && data.getData() != null)
+                    ? new Uri[]{ data.getData() } : null;
+            fileUploadCallback.onReceiveValue(results);
+            fileUploadCallback = null;
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
