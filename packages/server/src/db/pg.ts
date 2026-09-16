@@ -169,6 +169,26 @@ export class PostgresWordbookDB implements WordbookDB {
        ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at`,
       [userId, JSON.stringify(data), now],
     );
+    // 新词自动建 FSRS 卡(New 状态):与 sqlite 实现保持一致
+    for (const entry of data) {
+      const card = {
+        due: new Date(now).toISOString(),
+        stability: 1,
+        difficulty: 5,
+        elapsed_days: 0,
+        scheduled_days: 0,
+        reps: 0,
+        lapses: 0,
+        state: 0,
+        last_review: null,
+      };
+      await this.pool.query(
+        `INSERT INTO fsrs_cards (user_id, word, fsrs_data, last_review, created_at, updated_at)
+         VALUES ($1, $2, $3, NULL, $4, $4)
+         ON CONFLICT (user_id, word) DO NOTHING`,
+        [userId, entry.word, JSON.stringify(card), now],
+      );
+    }
   }
 
   async countAll(): Promise<number> {

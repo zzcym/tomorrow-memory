@@ -1,0 +1,6 @@
+{
+  "name": "tomorrow-memory-app",
+  "private": true,
+  "type": "commonjs",
+  "description": "明日记忆安卓 app(本目录 type:commonjs 仅为让 Node 单测正确加载 assets/api.js,无 npm 依赖)"
+}

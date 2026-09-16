@@ -1,0 +1,6 @@
+{
+  "name": "tomorrow-agenda",
+  "private": true,
+  "type": "commonjs",
+  "description": "明日日程 · 安卓原生壳 + WebView(本目录无 npm 依赖,type:commonjs 仅为让 Node 单测正确加载 assets/core.js)"
+}

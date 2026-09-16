@@ -1,0 +1,92 @@
+package com.tomorrow.memory;
+
+import android.app.Activity;
+import android.content.SharedPreferences;
+import android.os.Bundle;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+
+/** 明日记忆 · WebView 壳(查词/背词/单词本/登录,数据全部在 tmword.xyz 云端) */
+public class MainActivity extends Activity {
+    private WebView web;
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+    private String launchFocus = "";
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        // 小组件点击进入:直接聚焦搜索框
+        if ("search".equals(getIntent() != null ? getIntent().getStringExtra("focus") : null)) {
+            launchFocus = "search";
+        }
+        web = new WebView(this);
+        WebSettings s = web.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        web.setBackgroundColor(0xFFFFFFFF);
+        web.addJavascriptInterface(new Bridge(), "AndroidBridge");
+        // 页面就绪后把 SharedPreferences 里的 token 回灌 WebView(localStorage 可能被系统清理)
+        web.setWebViewClient(new android.webkit.WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                String token = getSharedPreferences("tm", MODE_PRIVATE).getString("token", "");
+                if (!token.isEmpty()) {
+                    String quoted = org.json.JSONObject.quote(token);
+                    view.evaluateJavascript(
+                            "try{if(!localStorage.getItem('tm.token'))localStorage.setItem('tm.token'," + quoted + ");}catch(e){}",
+                            null);
+                }
+            }
+        });
+        setContentView(web);
+        web.loadUrl("file:///android_asset/index.html");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 页面可见时触发 visibilitychange(前端刷新徽标与同步)
+        main.post(() -> web.evaluateJavascript(
+                "document.dispatchEvent(new Event('visibilitychange'))", null));
+    }
+
+    /** 系统返回键:菜单开→关菜单;非首页→回首页;其余交给系统(退出) */
+    @Override
+    public void onBackPressed() {
+        main.post(() -> web.evaluateJavascript(
+                "window.onAndroidBack ? String(window.onAndroidBack()) : 'exit'",
+                (v) -> {
+                    if (v != null && v.contains("exit")) {
+                        finish();
+                    }
+                }));
+    }
+
+    private void sendToJs(String script) {
+        main.post(() -> web.evaluateJavascript(script, null));
+    }
+
+    /** JS 桥 */
+    private class Bridge {
+        /** token 双写:WebView localStorage 之外再存一份 SharedPreferences */
+        @JavascriptInterface
+        public void saveToken(String token) {
+            SharedPreferences sp = getSharedPreferences("tm", MODE_PRIVATE);
+            sp.edit().putString("token", token == null ? "" : token).apply();
+        }
+
+        @JavascriptInterface
+        public String readToken() {
+            return getSharedPreferences("tm", MODE_PRIVATE).getString("token", "");
+        }
+
+        /** 小组件深链:取走即清空 */
+        @JavascriptInterface
+        public String consumeLaunchFocus() {
+            String f = launchFocus;
+            launchFocus = "";
+            return f;
+        }
+    }
+}

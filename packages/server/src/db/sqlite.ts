@@ -179,13 +179,33 @@ export class SqliteWordbookDB implements WordbookDB {
     return Promise.resolve(row ? safeJsonParse<WordbookEntry[]>(String(row.data), []) : []);
   }
 
-  saveData(userId: number, data: WordbookEntry[], now: number): Promise<void> {
+  async saveData(userId: number, data: WordbookEntry[], now: number): Promise<void> {
     this.db
       .prepare(
         `INSERT INTO wordbooks (user_id, data, updated_at) VALUES (?, ?, ?)
          ON CONFLICT (user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
       )
       .run(userId, JSON.stringify(data), now);
+    // 新词自动建 FSRS 卡(New 状态,due=now):加入单词本即可立即学习,无需手动初始化
+    const insertCard = this.db.prepare(
+      `INSERT INTO fsrs_cards (user_id, word, fsrs_data, last_review, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, ?, ?)
+       ON CONFLICT (user_id, word) DO NOTHING`,
+    );
+    for (const entry of data) {
+      const card = {
+        due: new Date(now).toISOString(),
+        stability: 1,
+        difficulty: 5,
+        elapsed_days: 0,
+        scheduled_days: 0,
+        reps: 0,
+        lapses: 0,
+        state: 0,
+        last_review: null,
+      };
+      insertCard.run(userId, entry.word, JSON.stringify(card), now, now);
+    }
     return Promise.resolve();
   }
 

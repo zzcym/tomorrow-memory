@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 小组件颜色(夜间值在 values-night) -->
+    <color name="widget_bg">#F7F8FA</color>
+    <color name="widget_stroke">#1F243010</color>
+    <color name="widget_text_primary">#1C1E22</color>
+    <color name="widget_text_muted">#8A8F99</color>
+    <color name="widget_accent">#0F6B5C</color>
+</resources>

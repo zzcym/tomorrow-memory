@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="day">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"/>
+  <title>明日日程</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <!-- ===== 顶栏 ===== -->
+  <header class="topbar">
+    <div class="tb-left">
+      <div class="tb-title" id="tbTitle">…</div>
+      <div class="tb-sub" id="tbSub"></div>
+    </div>
+    <div class="tb-right">
+      <button class="dh-today hidden" id="backToday">今天</button>
+      <div class="seg" id="viewSeg">
+        <button class="seg-btn active" data-mode="day">日</button>
+        <button class="seg-btn" data-mode="week">周</button>
+      </div>
+      <button class="icon-btn" id="menuBtn" aria-label="菜单"></button>
+    </div>
+  </header>
+
+  <!-- 顶部权限提示条 -->
+  <div class="warn-bar hidden" id="warnBar">
+    <span id="warnText"></span>
+    <button id="warnFix" class="wb-fix">去设置</button>
+  </div>
+
+  <!-- 右上角下拉菜单 -->
+  <div class="menu-pop hidden" id="menuPop">
+    <button class="menu-item" data-act="courses"><span class="mi-icon" data-icon="book"></span>导入课程表</button>
+    <button class="menu-item" data-act="appearance"><span class="mi-icon" data-icon="moon"></span>外观与主题</button>
+    <button class="menu-item" data-act="testNotify"><span class="mi-icon" data-icon="alarm"></span>测试一条通知</button>
+  </div>
+
+  <main id="main">
+    <!-- ===== 时间轴 ===== -->
+    <section class="page active" id="view-timeline">
+      <!-- 日视图 -->
+      <div id="dayView">
+        <div class="week-strip">
+          <button class="strip-nav" id="prevDay" aria-label="前一天" data-icon="chevronL"></button>
+          <div class="ws-days" id="weekStrip"></div>
+          <button class="strip-nav" id="nextDay" aria-label="后一天" data-icon="chevronR"></button>
+        </div>
+        <div class="allday-bar hidden" id="alldayBar"></div>
+        <div class="timeline-scroll" id="timelineScroll">
+          <div class="timeline" id="timeline">
+            <div class="tl-hours" id="tlHours"></div>
+            <div class="tl-events" id="tlEvents"></div>
+            <div class="now-line hidden" id="nowLine"><span class="now-dot"></span></div>
+          </div>
+        </div>
+      </div>
+      <!-- 周视图 -->
+      <div id="weekView" class="hidden">
+        <div class="weekgrid-head">
+          <button class="strip-nav" id="prevWeek" aria-label="上一周" data-icon="chevronL"></button>
+          <div class="wg-days" id="wgDays"></div>
+          <button class="strip-nav" id="nextWeek" aria-label="下一周" data-icon="chevronR"></button>
+        </div>
+        <div class="allday-bar hidden" id="weekAllDay"></div>
+        <div class="weekgrid-scroll" id="wgScroll">
+          <div class="weekgrid" id="weekgrid"></div>
+        </div>
+      </div>
+      <div class="safe-bottom"></div>
+    </section>
+
+    <!-- ===== 设置 ===== -->
+    <section class="page" id="view-settings">
+      <div class="card">
+        <h3>大模型 · 日程解析</h3>
+        <p class="hint">把说的话和文字解析成结构化日程。任意 OpenAI 兼容接口,推荐 DeepSeek</p>
+        <div class="field"><label>接口地址 Base URL</label>
+          <input id="llmBaseUrl" placeholder="https://api.deepseek.com"/></div>
+        <div class="field"><label>API Key</label>
+          <input id="llmApiKey" type="password" placeholder="sk-…"/></div>
+        <div class="field"><label>模型</label>
+          <input id="llmModel" placeholder="deepseek-chat"/></div>
+        <button id="testLlmBtn" class="btn btn-ghost btn-sm">测试连通</button>
+        <p class="hint hidden" id="llmTestResult"></p>
+      </div>
+
+      <div class="card">
+        <h3>语音识别 · 云端转写(可选)</h3>
+        <p class="hint">手机自带语音识别不可用时,自动录音并上传到你配置的转写接口(/audio/transcriptions,如 SiliconFlow 的 SenseVoice)。都没有时会引导用输入法语音</p>
+        <p class="hint" id="voiceModeHint"></p>
+        <button id="resetVoiceMode" class="btn btn-ghost btn-sm hidden">恢复系统语音优先</button>
+        <div class="field"><label>接口地址 Base URL</label>
+          <input id="asrBaseUrl" placeholder="https://api.siliconflow.cn"/></div>
+        <div class="field"><label>API Key</label>
+          <input id="asrApiKey" type="password" placeholder="sk-…"/></div>
+        <div class="field"><label>模型</label>
+          <input id="asrModel" placeholder="FunAudioLLM/SenseVoiceSmall"/></div>
+      </div>
+
+      <div class="card">
+        <h3>学期设置</h3>
+        <p class="hint">课程表导入以「第一教学周的周一」为锚点换算周次,可在这里改,导入时也会带上</p>
+        <div class="field"><label>第一教学周的周一</label>
+          <input id="semesterStartSetting" type="date"/></div>
+      </div>
+
+      <div class="card">
+        <h3>桌面小组件</h3>
+        <p class="hint">在桌面空白处长按 → 添加小组件 → 找「明日日程」,有三种尺寸:下一条(2×2)、今日 3 条(4×2)、今日全览(4×4)。日程变化和每天 00:05 自动更新</p>
+        <button id="widgetHelpBtn" class="btn btn-ghost btn-sm">桌面上没看到?点这里看排查</button>
+        <p class="hint hidden" id="widgetHelpTip">① 部分桌面(MIUI/EMUI 等)需在系统「设置→应用管理→明日日程」里允许「桌面快捷方式」权限;② 小组件列表太长时可搜索「明日」;③ 添加后若显示空,先打开一次本 app 再回到桌面等几秒</p>
+      </div>
+
+      <div class="card">
+        <h3>数据</h3>
+        <p class="hint">所有数据只存在手机本地。换机/重装前建议先导出备份文件</p>
+        <div class="sheet-actions" style="margin-top:0">
+          <button id="exportDataBtn" class="btn btn-ghost btn-sm grow">导出备份</button>
+          <button id="importDataBtn" class="btn btn-ghost btn-sm grow">导入备份</button>
+        </div>
+        <p class="hint hidden" id="dataMsg"></p>
+        <button id="clearDataBtn" class="btn btn-ghost btn-sm" style="margin-top:8px;color:var(--danger);border-color:var(--danger)">清空全部日程</button>
+      </div>
+
+      <div class="card">
+        <h3>提醒规则</h3>
+        <div class="field"><label>默认提前提醒(分钟,单条日程可单独改)</label>
+          <input id="leadMinutes" type="number" min="0" max="1440"/></div>
+        <div class="field"><label>每晚汇总时间</label>
+          <input id="digestTime" type="time"/></div>
+        <label class="check-row"><input id="digestEnabled" type="checkbox"/> 每天这个时间推送「明日日程」汇总</label>
+        <div class="sheet-actions">
+          <button id="saveSettingsBtn" class="btn btn-primary grow">保存设置</button>
+          <button id="testNotifyBtn" class="btn btn-ghost">测试通知</button>
+        </div>
+        <p class="hint" id="exactHint"></p>
+        <p class="hint">⚠️ 所有 Key 只存在手机本地,不会上传给除你配置接口外的任何人</p>
+      </div>
+
+      <div class="card">
+        <h3>关于</h3>
+        <p class="hint">明日日程 v2.2 · 数据全部保存在本机<br/>提醒依赖系统闹钟,建议在系统设置里关闭本应用的电池优化</p>
+      </div>
+      <div class="safe-bottom"></div>
+    </section>
+  </main>
+
+  <!-- ===== 底部导航 ===== -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-nav="timeline">
+      <span class="ni-icon" data-icon="calendar"></span><span class="ni-label">日程</span>
+    </button>
+    <button class="nav-mic" id="micBtn" aria-label="说话"></button>
+    <button class="nav-item" data-nav="settings">
+      <span class="ni-icon" data-icon="sliders"></span><span class="ni-label">设置</span>
+    </button>
+  </nav>
+
+  <!-- ===== 语音全屏浮层 ===== -->
+  <div class="voice-overlay hidden" id="voiceOverlay">
+    <div class="vo-orb" id="voOrb"><span class="vo-ic" data-icon="mic"></span></div>
+    <div class="vo-state" id="voState">点一下开始说话</div>
+    <div class="vo-hint" id="voHint">例如:「明天晚上八点和小王吃饭」</div>
+    <button class="vo-cancel" id="voCancel">取消</button>
+  </div>
+
+  <!-- ===== 底部抽屉 ===== -->
+  <div class="sheet-mask hidden" id="sheetMask"></div>
+
+  <!-- 识别结果确认 -->
+  <div class="sheet hidden" id="sheetQuick">
+    <div class="sheet-grip"></div>
+    <div class="sheet-title">确认后保存<button class="sheet-close" id="quickClose"></button></div>
+    <div class="sheet-body">
+      <div id="confirmList"></div>
+      <div class="error-text hidden" id="quickError"></div>
+    </div>
+    <div class="sheet-actions">
+      <button id="saveAllBtn" class="btn btn-primary grow">保存</button>
+      <button id="discardBtn" class="btn btn-ghost">放弃</button>
+    </div>
+  </div>
+
+  <!-- 事件详情/新建 -->
+  <div class="sheet hidden" id="sheetEvent">
+    <div class="sheet-grip"></div>
+    <div class="sheet-title" id="eventSheetTitle">日程详情<button class="sheet-close" id="eventClose"></button></div>
+    <div class="sheet-body" id="eventBody"></div>
+    <div class="sheet-actions" id="eventActions"></div>
+  </div>
+
+  <!-- 课程表导入:ics 文件 / 粘贴 -->
+  <div class="sheet hidden" id="sheetCourse">
+    <div class="sheet-grip"></div>
+    <div class="sheet-title">导入课程表<button class="sheet-close" id="courseClose"></button></div>
+    <div class="sheet-body">
+      <p class="hint">推荐:直接导入课程表 app(WakeUp/小爱课程表/课程表导出等)分享的 <b>.ics 日历文件</b>,自动识别周次和单双周</p>
+      <div class="sheet-actions" style="margin-top:8px">
+        <button id="courseIcsBtn" class="btn btn-primary grow">选择 .ics 文件</button>
+      </div>
+      <p class="opt-label">或者:粘贴文本(截图发给 AI 按它输出的 JSON,或每行一门课)</p>
+      <textarea id="coursePasteText" rows="4" placeholder='两种格式都支持:&#10;① {"courses":[{"name":"高等数学","weekday":1,"start":"08:00",…}]}&#10;② 周一 08:00-09:40 高等数学 教三-201 1-16周'></textarea>
+      <div class="error-text hidden" id="courseError"></div>
+      <div class="vo-loading hidden" id="courseLoading"><span class="spin"></span>正在解析…</div>
+    </div>
+    <div class="sheet-actions">
+      <button id="courseParseBtn" class="btn btn-primary grow">解析并核对</button>
+    </div>
+  </div>
+
+  <!-- 课程表导入·核对 -->
+  <div class="sheet hidden sheet-tall" id="sheetCoursePreview">
+    <div class="sheet-grip"></div>
+    <div class="sheet-title">核对识别结果<button class="sheet-close" id="coursePreviewClose"></button></div>
+    <div class="sheet-body">
+      <div class="field"><label>第一周的周一(学期开始)</label>
+        <input id="semesterStart" type="date"/></div>
+      <p class="hint" id="courseReplaceTip"></p>
+      <p class="hint">点条目可以改课程名、时间、地点。取消勾选表示不导入这一条</p>
+      <div id="coursePreviewList"></div>
+    </div>
+    <div class="sheet-actions">
+      <button id="courseImportBtn" class="btn btn-primary grow">导入所选课程</button>
+    </div>
+  </div>
+
+  <!-- 外观 -->
+  <div class="sheet hidden" id="sheetAppearance">
+    <div class="sheet-grip"></div>
+    <div class="sheet-title">外观与主题<button class="sheet-close" id="appearanceClose"></button></div>
+    <div class="sheet-body">
+      <p class="opt-label">主题</p>
+      <div class="seg seg-wide" id="themeSeg">
+        <button class="seg-btn" data-theme="day">日间</button>
+        <button class="seg-btn" data-theme="night">夜间</button>
+        <button class="seg-btn" data-theme="auto">跟随系统</button>
+      </div>
+      <p class="opt-label">背景图片</p>
+      <div class="sheet-actions" style="margin-top:0">
+        <button id="bgPickBtn" class="btn btn-ghost grow">选择图片</button>
+        <button id="bgClearBtn" class="btn btn-ghost">恢复默认</button>
+      </div>
+      <p class="opt-label">时间显示</p>
+      <div class="seg seg-wide" id="fmtSeg">
+        <button class="seg-btn" data-fmt="24h">24 小时制</button>
+        <button class="seg-btn" data-fmt="12h">12 小时制</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 打字兜底 -->
+  <div class="sheet hidden" id="sheetText">
+    <div class="sheet-grip"></div>
+    <div class="sheet-title">用文字添加<button class="sheet-close" id="textClose"></button></div>
+    <div class="sheet-body">
+      <textarea id="textInput" rows="3" placeholder="直接打字,如「明天晚上八点和小王吃饭」"></textarea>
+      <p class="hint">💡 也可以用输入法自带的语音输入(通常在空格键旁边),说完回到这里点「解析添加」</p>
+      <div class="error-text hidden" id="textError"></div>
+    </div>
+    <div class="sheet-actions">
+      <button id="voiceRetryBtn" class="btn btn-ghost">重试语音</button>
+      <button id="textSubmitBtn" class="btn btn-primary grow">解析添加</button>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="mock-bridge.js"></script>
+  <script src="icons.js"></script>
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

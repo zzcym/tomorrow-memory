@@ -90,10 +90,12 @@ export function buildTodayQueue(
       const card = cardFromJson(c.cardJson);
       const last = card.last_review ?? card.due;
       const elapsedDays = Math.max(0, (now.getTime() - new Date(last).getTime()) / 86_400_000);
-      return { word: c.word, retrievability: retrievability(card, now), elapsedDays, cardJson: c.cardJson };
+      return { word: c.word, retrievability: retrievability(card, now), elapsedDays, cardJson: c.cardJson, state: card.state };
     })
-    .filter((i) => i.retrievability < REVIEW_THRESHOLD)
-    .sort((a, b) => a.retrievability - b.retrievability);
+    // New(0) 卡为首次学习,始终进队列;老卡按遗忘阈值
+    .filter((i) => i.state === 0 || i.retrievability < REVIEW_THRESHOLD)
+    .sort((a, b) => a.retrievability - b.retrievability)
+    .map(({ state: _state, ...rest }) => rest);
   return items;
 }
 

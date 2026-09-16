@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
+
+    <TextView
+        android:id="@+id/wrTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="58dp"
+        android:fontFeatureSettings="tnum"
+        android:textColor="@color/widget_text_primary"
+        android:textSize="12sp"/>
+
+    <TextView
+        android:id="@+id/wrTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="8dp"
+        android:textColor="@color/widget_text_primary"
+        android:textSize="12sp"
+        android:maxLines="1"
+        android:ellipsize="end"/>
+
+    <TextView
+        android:id="@+id/wrLoc"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="6dp"
+        android:gravity="right"
+        android:textColor="@color/widget_text_muted"
+        android:textSize="11sp"
+        android:maxLines="1"
+        android:ellipsize="end"/>
+</LinearLayout>

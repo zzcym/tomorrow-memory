@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"/>
+  <title>明日记忆</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <!-- 顶栏:标题 + 右上角汉堡 -->
+  <header class="topbar">
+    <div class="tb-title" id="tbTitle">明日记忆</div>
+    <button class="hamburger" id="menuBtn" aria-label="菜单">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+
+  <!-- 下拉菜单 -->
+  <div class="menu-mask hidden" id="menuMask"></div>
+  <div class="menu-pop hidden" id="menuPop">
+    <button class="menu-item" data-act="review">背单词<span class="mi-badge hidden" id="miReviewCount"></span></button>
+    <button class="menu-item" data-act="wordbook">单词本</button>
+    <button class="menu-item" data-act="me"><span id="meLabel">登录 / 注册</span></button>
+    <button class="menu-item" data-act="about">关于</button>
+  </div>
+
+  <main id="main">
+    <!-- ===== 首页:查词(极简:只有搜索框与结果) ===== -->
+    <section class="page active" id="page-home">
+      <div class="result-area" id="resultArea">
+        <div id="lookupResult"></div>
+      </div>
+      <!-- 底部圆角搜索框 -->
+      <div class="search-dock">
+        <form class="search-box" id="searchForm">
+          <input id="searchInput" type="search" enterkeyhint="search"
+                 placeholder="输入单词或中文释义…" autocomplete="off" autocapitalize="off" spellcheck="false"/>
+          <button id="searchGo" type="submit" aria-label="查询">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ===== 背单词 ===== -->
+    <section class="page" id="page-review">
+      <div class="page-pad" id="reviewBody"></div>
+    </section>
+
+    <!-- ===== 单词本 ===== -->
+    <section class="page" id="page-wordbook">
+      <div class="page-pad" id="wordbookBody"></div>
+    </section>
+
+    <!-- ===== 登录/我的 ===== -->
+    <section class="page" id="page-me">
+      <div class="page-pad" id="meBody"></div>
+    </section>
+
+    <!-- ===== 关于 ===== -->
+    <section class="page" id="page-about">
+      <div class="page-pad">
+        <div class="card">
+          <h3>明日记忆</h3>
+          <p class="hint">v1.0 · 与网页版 tmword.xyz 同账号同数据<br/>查词、单词本、背词进度实时保存在云端,换机不丢</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast hidden" id="toast"></div>
+  <div class="loading-bar hidden" id="loadingBar"><div class="lb-inner"></div></div>
+
+  <script>window.__API_BASE__ = localStorage.getItem("tm.base") || undefined;</script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
