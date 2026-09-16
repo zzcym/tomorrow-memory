@@ -8,7 +8,7 @@
 
 import { Hono } from 'hono';
 import type { AgentDeps, LlmRouter } from '@tm/agent';
-import { buildTodayQueue, runAgent } from '@tm/agent';
+import { buildTodayQueue, cardToJson, createDefaultCard, runAgent } from '@tm/agent';
 import type { AppDB } from '../db/types.js';
 import { auth, type AuthEnv } from '../middleware/auth.js';
 
@@ -17,8 +17,30 @@ export function createReviewRouter(db: AppDB, deps: AgentDeps, router: LlmRouter
 
   r.get('/api/review/today', auth, async (c) => {
     const userId = c.get('userId');
+    const wordbook = await db.wordbooks.getData(userId);
     const cards = await db.fsrs.getCardsByUser(userId);
-    const queue = buildTodayQueue(cards.map((x) => ({ word: x.word, cardJson: x.fsrs_data })));
+    // 与单词本双向对齐:
+    // 1) 单词本里的新词(尚无 FSRS 卡)→ 建默认 New 卡,立即进入队列,背单词范围与单词本一致
+    const haveCard = new Set(cards.map((x) => x.word));
+    const now = Date.now();
+    const fresh: Array<{ word: string; cardJson: string }> = [];
+    for (const w of wordbook) {
+      if (haveCard.has(w.word)) continue;
+      const json = cardToJson(createDefaultCard(new Date(now)));
+      await db.fsrs.upsertCard(userId, w.word, json, null, now);
+      fresh.push({ word: w.word, cardJson: json });
+    }
+    const queue = buildTodayQueue([
+      ...cards.map((x) => ({ word: x.word, cardJson: x.fsrs_data })),
+      ...fresh,
+    ]);
+    // 2) 队列中的历史词若不在单词本(跨端来源),自动补入
+    const have = new Set(wordbook.map((w) => w.word));
+    const missing = queue.filter((q) => !have.has(q.word));
+    if (missing.length) {
+      for (const m of missing) wordbook.push({ word: m.word, addedAt: Date.now() });
+      await db.wordbooks.saveData(userId, wordbook, Date.now());
+    }
     return c.json({
       total: cards.length,
       dueToday: queue.length,
