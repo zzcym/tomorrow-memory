@@ -288,6 +288,11 @@ function renderMe() {
         </div>
         <button class="btn btn-ghost btn-sm" id="editProfileBtn">编辑</button>
       </div>
+      <div class="nick-edit hidden" id="nickEdit">
+        <input id="nickInput" maxlength="30" placeholder="昵称(最长 30 字)"/>
+        <button class="btn btn-primary btn-sm" id="nickSave">保存</button>
+        <button class="btn btn-ghost btn-sm" id="nickCancel">取消</button>
+      </div>
       <input type="file" id="avatarFile" accept="image/*" class="hidden"/>
       <p class="hint" id="meStats" style="margin-top:10px">加载统计中…</p>
     </div>
@@ -326,18 +331,24 @@ function renderMe() {
     renderHeatmap($('heatmap'), pf.reviewDates || []);
   })();
 
-  // 编辑昵称
+  // 编辑昵称:App 内行内编辑(不依赖 WebView 对话框)
   $('editProfileBtn').addEventListener('click', () => {
-    const name = $('meName').textContent === (API.getAuth().phone) ? '' : $('meName').textContent;
-    const v = prompt('昵称(最长 30 字)', name || '');
-    if (v === null) return;
-    const nv = v.trim().slice(0, 30);
+    const cur = $('meName').textContent === (API.getAuth().phone) ? '' : $('meName').textContent;
+    $('nickInput').value = cur;
+    $('nickEdit').classList.remove('hidden');
+    $('nickInput').focus();
+  });
+  $('nickCancel').addEventListener('click', () => $('nickEdit').classList.add('hidden'));
+  const saveNick = () => {
+    const nv = $('nickInput').value.trim().slice(0, 30);
     API.profileUpdate({ nickname: nv }).then(() => {
       API.setAuth(API.getToken(), API.getAuth().phone, nv);
       renderMe();
       toast('昵称已更新');
     }).catch((e) => toast(e.message, true));
-  });
+  };
+  $('nickSave').addEventListener('click', saveNick);
+  $('nickInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNick(); });
 
   // 更换头像:系统文件选择 → canvas 压缩 512px JPEG → PUT profile
   $('avatarBtn').addEventListener('click', () => $('avatarFile').click());

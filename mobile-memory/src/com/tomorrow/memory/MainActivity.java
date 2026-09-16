@@ -32,6 +32,39 @@ public class MainActivity extends Activity {
         // 头像上传:WebView <input type=file> → 系统文件选择器
         web.setWebChromeClient(new android.webkit.WebChromeClient() {
             @Override
+            public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, android.webkit.JsPromptResult result) {
+                android.widget.EditText input = new android.widget.EditText(view.getContext());
+                input.setText(defaultValue == null ? "" : defaultValue);
+                new android.app.AlertDialog.Builder(view.getContext())
+                        .setTitle(message)
+                        .setView(input)
+                        .setPositiveButton("确定", (d, w) -> result.confirm(input.getText().toString()))
+                        .setNegativeButton("取消", (d, w) -> result.cancel())
+                        .setOnCancelListener((d) -> result.cancel())
+                        .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {
+                new android.app.AlertDialog.Builder(view.getContext())
+                        .setMessage(message)
+                        .setPositiveButton("确定", (d, w) -> result.confirm())
+                        .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
+                new android.app.AlertDialog.Builder(view.getContext())
+                        .setMessage(message)
+                        .setPositiveButton("确定", (d, w) -> result.confirm())
+                        .setNegativeButton("取消", (d, w) -> result.cancel())
+                        .show();
+                return true;
+            }
+
+            @Override
             public boolean onShowFileChooser(WebView view, android.webkit.ValueCallback<Uri[]> callback,
                                              android.webkit.WebChromeClient.FileChooserParams params) {
                 if (fileUploadCallback != null) {
