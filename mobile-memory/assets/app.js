@@ -18,23 +18,27 @@ function toast(msg, ms) {
 function loading(on) { $('loadingBar').classList.toggle('hidden', !on); }
 
 /* ================= 页面路由 ================= */
-const PAGES = ['home', 'review', 'wordbook', 'me', 'about'];
+const PAGES = ['home', 'review', 'wordbook', 'me', 'about', 'security'];
 let curPage = 'home';
+let prevPage = 'home';
 function goto(page) {
+  prevPage = curPage !== page ? curPage : prevPage;
   curPage = page;
   PAGES.forEach((p) => $('page-' + p).classList.toggle('active', p === page));
   closeMenu();
   $('tbTitle').textContent = page === 'home' ? '明日记忆' : page === 'review' ? '背单词'
-    : page === 'wordbook' ? '单词本' : page === 'me' ? '我的' : '关于';
+    : page === 'wordbook' ? '单词本' : page === 'me' ? '我的'
+    : page === 'security' ? '账号安全' : '关于';
   $('backHome').classList.toggle('hidden', page === 'home');
   if (page === 'review') renderReview();
   if (page === 'wordbook') renderWordbook();
   if (page === 'me') renderMe();
+  if (page === 'security') renderSecurity();
   if (page === 'home') setTimeout(() => $('searchInput').focus(), 80);
 }
 
-/* 返回首页(非首页显示) */
-$('backHome').addEventListener('click', () => goto('home'));
+/* 返回上一页(首页除外) */
+$('backHome').addEventListener('click', () => goto(prevPage === 'security' ? 'me' : prevPage));
 
 /* 汉堡菜单 */
 function openMenu() { $('menuMask').classList.remove('hidden'); $('menuPop').classList.remove('hidden'); refreshReviewBadge(); } // 每次开菜单都取最新待背数,避免背到一半退出后显示旧数字
@@ -344,17 +348,8 @@ function renderMe() {
         <span>多</span>
       </div>
     </div>
-    <div class="card">
-      <h3>账号安全</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div class="field"><label>新密码(至少 4 位)</label>
-          <input id="pwdNew" type="password" placeholder="新密码"/></div>
-        <div class="field"><label>确认新密码</label>
-          <input id="pwdConfirm" type="password" placeholder="再输一次"/></div>
-      </div>
-      <button id="pwdSaveBtn" class="btn btn-primary" style="width:100%">保存密码</button>
-      <p class="hint" style="margin-top:8px">设置后可用手机号+密码登录,无需验证码</p>
-      <p class="error-text hidden" id="pwdErr"></p>
+    <div class="card" style="padding:4px 16px">
+      <button class="me-row" id="securityBtn">账号安全<span class="me-row-arrow">›</span></button>
     </div>
     <div class="card">
       <button id="logoutBtn" class="btn btn-ghost" style="width:100%;color:var(--danger);border-color:var(--danger)">退出登录</button>
@@ -365,26 +360,7 @@ function renderMe() {
     refreshReviewBadge();
     toast('已退出');
   });
-  // 修改/设置密码:PUT /api/password(服务端已有端点)
-  $('pwdSaveBtn').addEventListener('click', async () => {
-    const p1 = $('pwdNew').value, p2 = $('pwdConfirm').value;
-    const err = $('pwdErr');
-    const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
-    if (p1.length < 4) return fail('密码至少 4 位');
-    if (p1 !== p2) return fail('两次输入的密码不一致');
-    const btn = $('pwdSaveBtn');
-    btn.disabled = true; btn.textContent = '保存中…';
-    try {
-      await API.passwordUpdate(p1);
-      err.classList.add('hidden');
-      $('pwdNew').value = ''; $('pwdConfirm').value = '';
-      toast('密码已更新,下次可用密码登录');
-    } catch (e) {
-      fail(e.message);
-    } finally {
-      btn.disabled = false; btn.textContent = '保存密码';
-    }
-  });
+  $('securityBtn').addEventListener('click', () => goto('security'));
 
   // 拉档案:昵称/头像/统计/热力图数据
   (async () => {
@@ -940,6 +916,41 @@ async function refreshReviewBadge() {
   } catch (e) { /* 静默 */ }
 }
 
+/* ================= 账号安全:修改密码 ================= */
+function renderSecurity() {
+  const body = $('securityBody');
+  body.innerHTML = `
+    <div class="card">
+      <h3>修改密码</h3>
+      <p class="hint">设置后可用手机号+密码登录,无需验证码</p>
+      <div class="field"><label>新密码(至少 4 位)</label>
+        <input id="pwdNew" type="password" placeholder="新密码"/></div>
+      <div class="field"><label>确认新密码</label>
+        <input id="pwdConfirm" type="password" placeholder="再输一次"/></div>
+      <button id="pwdSaveBtn" class="btn btn-primary" style="width:100%">保存密码</button>
+      <p class="error-text hidden" id="pwdErr"></p>
+    </div>`;
+  $('pwdSaveBtn').addEventListener('click', async () => {
+    const p1 = $('pwdNew').value, p2 = $('pwdConfirm').value;
+    const err = $('pwdErr');
+    const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+    if (p1.length < 4) return fail('密码至少 4 位');
+    if (p1 !== p2) return fail('两次输入的密码不一致');
+    const btn = $('pwdSaveBtn');
+    btn.disabled = true; btn.textContent = '保存中…';
+    try {
+      await API.passwordUpdate(p1);
+      err.classList.add('hidden');
+      $('pwdNew').value = ''; $('pwdConfirm').value = '';
+      toast('密码已更新,下次可用密码登录');
+    } catch (e) {
+      fail(e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '保存密码';
+    }
+  });
+}
+
 /* ================= 启动 ================= */
 API.setOn401(() => {
   goto('me');
@@ -950,6 +961,7 @@ API.setOn401(() => {
 /** Android 返回键:返回 'exit' 才退出;否则消费(关菜单/回首页) */
 window.onAndroidBack = () => {
   if (!$('menuPop').classList.contains('hidden')) { closeMenu(); return 'stay'; }
+  if (curPage === 'security') { goto('me'); return 'stay'; }
   if (curPage !== 'home') { goto('home'); return 'stay'; }
   return 'exit';
 };
