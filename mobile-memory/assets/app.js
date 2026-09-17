@@ -18,27 +18,44 @@ function toast(msg, ms) {
 function loading(on) { $('loadingBar').classList.toggle('hidden', !on); }
 
 /* ================= 页面路由 ================= */
-const PAGES = ['home', 'review', 'wordbook', 'me', 'about', 'security'];
+const PAGES = ['home', 'review', 'wordbook', 'me', 'about', 'security', 'password'];
+const TITLES = { home: '明日记忆', review: '背单词', wordbook: '单词本', me: '我的', about: '关于', security: '账号安全', password: '修改密码' };
 let curPage = 'home';
-let prevPage = 'home';
-function goto(page) {
-  prevPage = curPage !== page ? curPage : prevPage;
-  curPage = page;
+const pageStack = ['home'];        // 页面栈:支持任意层级导航(我的→账号安全→修改密码)
+
+function renderPage(page) {
   PAGES.forEach((p) => $('page-' + p).classList.toggle('active', p === page));
   closeMenu();
-  $('tbTitle').textContent = page === 'home' ? '明日记忆' : page === 'review' ? '背单词'
-    : page === 'wordbook' ? '单词本' : page === 'me' ? '我的'
-    : page === 'security' ? '账号安全' : '关于';
+  $('tbTitle').textContent = TITLES[page] || '明日记忆';
   $('backHome').classList.toggle('hidden', page === 'home');
   if (page === 'review') renderReview();
   if (page === 'wordbook') renderWordbook();
   if (page === 'me') renderMe();
   if (page === 'security') renderSecurity();
+  if (page === 'password') renderPassword();
   if (page === 'home') setTimeout(() => $('searchInput').focus(), 80);
 }
 
-/* 返回上一页(首页除外) */
-$('backHome').addEventListener('click', () => goto(prevPage === 'security' ? 'me' : prevPage));
+function goto(page) {
+  const at = pageStack.indexOf(page);
+  if (at >= 0) pageStack.length = at + 1;   // 切回栈中已有页:弹出其上的层级
+  else pageStack.push(page);
+  curPage = page;
+  renderPage(page);
+}
+
+function goBack() {
+  if (pageStack.length > 1) {
+    pageStack.pop();
+    curPage = pageStack[pageStack.length - 1];
+    renderPage(curPage);
+    return 'stay';
+  }
+  return 'exit';
+}
+
+/* 顶栏返回 */
+$('backHome').addEventListener('click', () => goBack());
 
 /* 汉堡菜单 */
 function openMenu() { $('menuMask').classList.remove('hidden'); $('menuPop').classList.remove('hidden'); refreshReviewBadge(); } // 每次开菜单都取最新待背数,避免背到一半退出后显示旧数字
@@ -916,12 +933,20 @@ async function refreshReviewBadge() {
   } catch (e) { /* 静默 */ }
 }
 
-/* ================= 账号安全:修改密码 ================= */
+/* ================= 账号安全(选项页) ================= */
 function renderSecurity() {
-  const body = $('securityBody');
+  $('securityBody').innerHTML = `
+    <div class="card" style="padding:4px 16px">
+      <button class="me-row" id="toPasswordBtn">修改密码<span class="me-row-arrow">›</span></button>
+    </div>`;
+  $('toPasswordBtn').addEventListener('click', () => goto('password'));
+}
+
+/* ================= 修改密码(表单页) ================= */
+function renderPassword() {
+  const body = $('passwordBody');
   body.innerHTML = `
     <div class="card">
-      <h3>修改密码</h3>
       <p class="hint">设置后可用手机号+密码登录,无需验证码</p>
       <div class="field"><label>新密码(至少 4 位)</label>
         <input id="pwdNew" type="password" placeholder="新密码"/></div>
@@ -961,9 +986,7 @@ API.setOn401(() => {
 /** Android 返回键:返回 'exit' 才退出;否则消费(关菜单/回首页) */
 window.onAndroidBack = () => {
   if (!$('menuPop').classList.contains('hidden')) { closeMenu(); return 'stay'; }
-  if (curPage === 'security') { goto('me'); return 'stay'; }
-  if (curPage !== 'home') { goto('home'); return 'stay'; }
-  return 'exit';
+  return goBack();
 };
 
 function init() {
