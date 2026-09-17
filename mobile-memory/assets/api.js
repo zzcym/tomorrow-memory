@@ -208,6 +208,7 @@ const API = (() => {
   const checkin = () => req('POST', '/api/checkin', {}, true);
   const profile = () => req('GET', '/api/profile', undefined, true);
   const profileUpdate = (patch) => req('PUT', '/api/profile', patch, true);
+  const passwordUpdate = (password) => req('PUT', '/api/password', { password }, true);
 
   return {
     LS, getToken, setAuth, getAuth, setOn401,
@@ -215,7 +216,7 @@ const API = (() => {
     lookup, lookupCache,
     recentList, recentAdd, recentClear,
     wbCache, wbLocalAdd, wbLocalRemove, wbLocalClear, wbSync, wbQueue,
-    reviewToday, reviewCard, checkinStatus, checkin, profile, profileUpdate,
+    reviewToday, reviewCard, checkinStatus, checkin, profile, profileUpdate, passwordUpdate,
   };
 })();
 

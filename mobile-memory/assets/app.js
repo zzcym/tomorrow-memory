@@ -345,6 +345,18 @@ function renderMe() {
       </div>
     </div>
     <div class="card">
+      <h3>账号安全</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="field"><label>新密码(至少 4 位)</label>
+          <input id="pwdNew" type="password" placeholder="新密码"/></div>
+        <div class="field"><label>确认新密码</label>
+          <input id="pwdConfirm" type="password" placeholder="再输一次"/></div>
+      </div>
+      <button id="pwdSaveBtn" class="btn btn-primary" style="width:100%">保存密码</button>
+      <p class="hint" style="margin-top:8px">设置后可用手机号+密码登录,无需验证码</p>
+      <p class="error-text hidden" id="pwdErr"></p>
+    </div>
+    <div class="card">
       <button id="logoutBtn" class="btn btn-ghost" style="width:100%;color:var(--danger);border-color:var(--danger)">退出登录</button>
     </div>`;
   $('logoutBtn').addEventListener('click', () => {
@@ -352,6 +364,26 @@ function renderMe() {
     renderMe();
     refreshReviewBadge();
     toast('已退出');
+  });
+  // 修改/设置密码:PUT /api/password(服务端已有端点)
+  $('pwdSaveBtn').addEventListener('click', async () => {
+    const p1 = $('pwdNew').value, p2 = $('pwdConfirm').value;
+    const err = $('pwdErr');
+    const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+    if (p1.length < 4) return fail('密码至少 4 位');
+    if (p1 !== p2) return fail('两次输入的密码不一致');
+    const btn = $('pwdSaveBtn');
+    btn.disabled = true; btn.textContent = '保存中…';
+    try {
+      await API.passwordUpdate(p1);
+      err.classList.add('hidden');
+      $('pwdNew').value = ''; $('pwdConfirm').value = '';
+      toast('密码已更新,下次可用密码登录');
+    } catch (e) {
+      fail(e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '保存密码';
+    }
   });
 
   // 拉档案:昵称/头像/统计/热力图数据
