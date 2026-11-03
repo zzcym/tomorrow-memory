@@ -26,7 +26,8 @@ pg.log
 server.log
 
 # archives & backups
-backups/
+backups/*
+!backups/.gitkeep
 pgdata/
 pgsql/
 _archive/
@@ -59,3 +60,74 @@ deploy.sh
 # next.js
 .next/
 *.tsbuildinfo
+
+# ---- T-01 构建基线：APK 构建链必须入库（审计 D-01 / S7）----
+# 上面的通配 *.sh / *.py 误伤了打包脚本，新克隆因此无法复现打包。
+# 反向纳入仅限这两条路径，不要在此扩大范围（其余 .sh/.py 仍按通配忽略）。
+!mobile-memory/build-apk.sh
+!mobile-memory/scripts/
+!mobile-memory/scripts/**
+
+# ---- 出口轮 E1b（A-33-9 / T-20 上报⑨）：启动图标不再被上面的 `*.png` 误伤 ----
+# 事实：`:38` 的 `*.png` 把 5 个 `mobile-memory/res/mipmap-*/ic_launcher.png` 一起忽略了 →
+# 干净克隆拿不到图标，aapt2 步骤**必然**红（T-20 已在临时克隆里实证）。
+# 反向纳入只限 `mobile-memory/res/` 这一条路径，不要在此扩大范围（其余 `*.png` 仍按通配忽略）。
+# ⛔ 本文件只改忽略规则文本：un-ignore 之后这 5 个文件仍是未跟踪状态，
+#    `git add -f` 是 git 写操作，任何 agent（含出口轮）都不许做，由 TPM 在 Phase 8 统一入库（A-33-9）。
+!mobile-memory/res/
+!mobile-memory/res/**
+
+# ---- T-01 一次配齐的构建产物与备份忽略项（§10.3：本文件归 T-01，后续任务只读）----
+# 前三项已被通配规则覆盖（dist/ build/ backups/），这里按设计显式登记，避免后续任务再改本文件
+apps/app/dist/
+mobile-memory/build/
+backups/*.db
+# 出口轮 E1b（A-33-9 采纳 T-20 建议③）：APK 产物走 CI artifact / 直链，不进版本库。
+# 与 legacy 的 `明日记忆.apk` 无关（A-33-12：默认产物名保持 `tmword-dev.apk`，绝不覆盖未提交的 legacy 件）。
+mobile-memory/tmword-*.apk
+mobile-memory/tmword-*.apk.idsig
+
+# ---- 后训练工程（eval/ + training/）----
+# 上面的 `*.py` / `*.sh` 通配会误伤训练脚本，这里按目录反向纳入（不要扩大范围）
+!training/**/*.py
+!training/**/*.sh
+!eval/**/*.py
+
+# 训练环境与产物（体积大、可重建）
+.venv-train/
+.venv*/
+training/data/
+training/outputs/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+wandb/
+runs/
+
+# ---- 2026-11-04 仓库整理：签名私钥与自动化产物 ----
+# APK 签名私钥绝不入库。keystore.jks 曾被发现已跟踪，本次 git rm --cached 摘除；
+# 本地文件仍保留在 mobile-memory/ 下，打包脚本照常可用。
+*.jks
+*.keystore
+mobile-memory/keystore*.sha256
+
+# Playwright / 浏览器自动化产物
+apps/web/test-results/
+apps/web/playwright-report/
+*.webm
+docs/_edge_profile/
+
+# tsx 路径 bug 生成的垃圾目录（历史上出现过 undefined/temp/tsx-*）
+undefined/
+
+# 本地调试日志
+tmp-logs/
+
+# 已移出仓库的课程作业与图片产物（保留忽略规则，防止以后再被误加）
+dl-hw1/
+hw1_p3p5/
+ai-hw1/
+pdf_extract/
+vibe_images/
+gui-test-screenshots/
