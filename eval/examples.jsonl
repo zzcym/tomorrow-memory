@@ -1,0 +1,8 @@
+{"id":"r001","kind":"route","text":"abandon 怎么都记不住，有啥办法","expect":{"intent":"learn","tools":["etymology","finish"]},"notes":"「怎么都记不住」是 learn 的强信号，不是 review"}
+{"id":"r002","kind":"route","text":"今天该复习啥","expect":{"intent":"review","tools":["fsrs_queue","finish"]}}
+{"id":"r003","kind":"route","text":"今天该复习啥，顺便讲讲 abandon","expect":{"intent":"review","tools":["fsrs_queue","tutor_content","finish"]},"tags":["multi_step"],"notes":"一句话两个诉求：先调度、再讲解。只做一半算失败"}
+{"id":"r004","kind":"route","text":"考我 abandon，我答 3 分","expect":{"intent":"assess","tools":["fsrs_rate","finish"],"args":{"word":"abandon","rating":3}}}
+{"id":"r005","kind":"route","text":"这个怎么办","expect":{"clarify":true},"notes":"无词、无关键词 → 必须反问，不许猜"}
+{"id":"r006","kind":"route","text":"abandon","expect":{"intent":"learn","tools":["tutor_content","finish"]},"tags":["no_clarify"],"notes":"裸词不算模糊。这是 over-clarify 负例：规则实现会把它判成不明确然后反问，那是错的"}
+{"id":"r007","kind":"route","text":"我这周学了几个词","expect":{"intent":"report","tools":["user_stats","finish"]},"tags":["no_word"],"notes":"无目标词但有明确意图，必须走 user_stats 而不是反问"}
+{"id":"c001","kind":"content","word":"abandon","level":"B1","expect":{"constraints":["词根拆解提到 ad- 或 ban-","sceneExamples 恰好 3 条","每条例句都含 abandon 或其词形（abandoned/abandoning/abandons）","口诀是中文，且不含整句英文"]},"notes":"词形校验用 stardict 的 exchange 字段，可机器判定"}

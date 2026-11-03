@@ -1,0 +1,29 @@
+# 训练栈依赖（下限约束；实际版本见 requirements.lock.txt）
+# 注意：torch 不在这里 —— 它必须走 https://download.pytorch.org/whl/cu126
+#       （Windows 上 PyPI 的 torch 是 CPU-only 构建）
+
+# Qwen3.5 需要较新的 transformers（旧版本没有 qwen3_5 模型实现）
+transformers>=4.57
+tokenizers>=0.21
+safetensors
+# 钉版本：sentencepiece 0.2.x 在本机 import 时 DLL 初始化崩溃（access violation），0.1.99 正常
+sentencepiece==0.1.99
+
+# 训练
+accelerate>=1.0
+datasets>=3.0
+peft>=0.14
+trl>=0.20
+bitsandbytes>=0.45
+
+# 数据与模型下载
+huggingface_hub
+modelscope
+
+# 工具
+numpy
+python-dotenv
+tqdm
+einops
+pandas
+openai

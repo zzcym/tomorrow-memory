@@ -12,23 +12,37 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "test": "vitest run",
+    "ddl-parity": "node tools/ddl-parity.mjs",
+    "depcruise": "depcruise . --config .dependency-cruiser.cjs",
+    "release:preflight": "node scripts/release/preflight.mjs",
+    "dev:web": "pnpm --filter @tm/web dev",
+    "dev:app": "pnpm --filter @tm/app dev",
     "dev:server": "pnpm --filter @tm/server dev",
     "dev:agent": "pnpm --filter @tm/agent dev",
+    "preflight": "node eval/preflight.mjs",
+    "eval:validate": "node eval/validate.mjs",
+    "eval:words": "node eval/sample-words.mjs",
+    "train:env": "powershell -NoProfile -ExecutionPolicy Bypass -File training/setup-env.ps1",
     "db:migrate": "pnpm --filter @tm/server migrate",
     "db:init-fsrs": "pnpm --filter @tm/server init-fsrs",
     "build:index": "pnpm --filter @tm/agent build-index",
     "docker:up": "docker compose -f docker-compose.dev.yml up -d",
     "docker:down": "docker compose -f docker-compose.dev.yml down"
   },
+  "//pnpm": "RK-10/S13 的版本钉死（react/react-dom/@types/ts-fsrs/zod）不在这里：pnpm v11 已忽略 package.json 的 pnpm.overrides 字段，唯一真相见 pnpm-workspace.yaml 的 overrides。",
   "devDependencies": {
     "@eslint/js": "^9.14.0",
     "@types/node": "^22.9.0",
+    "dependency-cruiser": "^18.3.1",
     "eslint": "^9.14.0",
     "eslint-config-prettier": "^9.1.0",
+    "jsdom": "^26.1.0",
     "prettier": "^3.3.3",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
-    "typescript-eslint": "^8.13.0"
+    "typescript-eslint": "^8.13.0",
+    "vitest": "^3.2.7"
   },
   "packageManager": "pnpm@11.24.0+sha512.bd27e345e976dcb0be0b7a1228217b049a817e21b1f355c90dbe7dc46671895a8bc1e6d06c24554505ea93ea0b45f489a27ec1bfbc8de6a9659fca0f16fa0000"
 }

@@ -1,0 +1,154 @@
+{
+  "$comment": "明日记忆 · 工具环境定义（唯一真相）。eval 的 validate/评测、后续数据合成、模型的 tool 描述都从这里读，禁止在别处另写一份。",
+  "version": 1,
+  "updated": "2026-10-30",
+  "principle": "模型只做决策，不做算术。FSRS 调度、学情聚合、词典查询都由工具完成 —— 这样 reward 才可验证。",
+  "tools": [
+    {
+      "name": "dict_lookup",
+      "description": "查询英文单词的释义、音标、词性、词形变化。本地词典，毫秒级。",
+      "when": "用户想知道一个词是什么意思 / 怎么读 / 有哪些词形变化",
+      "params": {
+        "word": { "type": "string", "required": true, "desc": "小写英文单词，不含标点" }
+      },
+      "returns": {
+        "found": "boolean",
+        "translation": "string（中文释义，可能多义项，换行分隔）",
+        "phonetic": "string",
+        "pos": "string",
+        "exchange": "string（词形变化，格式 d:xx/p:xx/i:xx/3:xx/s:xx）"
+      },
+      "cost_ms": 5
+    },
+    {
+      "name": "etymology",
+      "description": "拆解单词的词根词缀，给出记忆线索（不是释义，是「为什么这么拼」）。",
+      "when": "用户说记不住、想要记忆方法、想知道构词",
+      "params": {
+        "word": { "type": "string", "required": true, "desc": "小写英文单词" }
+      },
+      "returns": {
+        "found": "boolean",
+        "parts": "array<{part: string, meaning: string}>（如 [{part:'ad-', meaning:'朝向'}]）",
+        "hint": "string（一句中文联想提示）"
+      },
+      "cost_ms": 300
+    },
+    {
+      "name": "examples",
+      "description": "取该词的真实中英例句（来自语料库）。",
+      "when": "用户想在语境里理解这个词、想要例句",
+      "params": {
+        "word": { "type": "string", "required": true, "desc": "小写英文单词" },
+        "limit": { "type": "integer", "required": false, "default": 3, "min": 1, "max": 5 }
+      },
+      "returns": {
+        "items": "array<{en: string, zh: string}>",
+        "count": "integer"
+      },
+      "cost_ms": 10
+    },
+    {
+      "name": "fsrs_queue",
+      "description": "取用户待复习的卡片队列，按到期紧迫度排序，含回忆概率。",
+      "when": "用户问今天/这周该复习什么、复习进度",
+      "params": {
+        "days": { "type": "integer", "required": false, "default": 0, "desc": "未来 N 天内到期的卡，0 = 今天到期" },
+        "limit": { "type": "integer", "required": false, "default": 20 }
+      },
+      "returns": {
+        "items": "array<{word: string, retrievability: number, elapsedDays: number, due: string}>",
+        "count": "integer",
+        "empty": "boolean（队列为空时 true，模型应据此改口而不是硬讲）"
+      },
+      "cost_ms": 20
+    },
+    {
+      "name": "fsrs_rate",
+      "description": "提交一次复习评分并更新该词的 FSRS 调度。模型不得自行计算下次复习时间。",
+      "when": "用户明确给出对某个词的记忆自评（忘记 / 困难 / 想起来 / 太简单）",
+      "params": {
+        "word": { "type": "string", "required": true, "desc": "小写英文单词" },
+        "rating": {
+          "type": "integer",
+          "required": true,
+          "enum": [1, 2, 3, 4],
+          "desc": "1=完全忘记 2=困难 3=想起来了 4=太简单"
+        }
+      },
+      "returns": {
+        "nextDue": "string（ISO 日期）",
+        "stability": "number",
+        "intervalDays": "integer"
+      },
+      "cost_ms": 20
+    },
+    {
+      "name": "user_stats",
+      "description": "学情聚合：学习量、正确率、各难度分布、连续打卡天数。",
+      "when": "用户问学习情况、进度、效果、坚持了多久",
+      "params": {
+        "range": { "type": "string", "required": false, "default": "7d", "enum": ["today", "7d", "30d"] }
+      },
+      "returns": {
+        "totalReviews": "integer",
+        "accuracy": "number",
+        "wordsLearned": "integer",
+        "streakDays": "integer",
+        "byRating": "object（{1:{...},2:{...},3:{...},4:{...}}）"
+      },
+      "cost_ms": 60
+    },
+    {
+      "name": "tutor_content",
+      "description": "生成或读取某词的教学卡片（口诀 / 词根 / 例句 / 易混词）。命中缓存直接返回，未命中则由模型生成。",
+      "when": "用户要「讲讲这个词」，且需要教学内容而不只是释义",
+      "params": {
+        "word": { "type": "string", "required": true, "desc": "小写英文单词" },
+        "level": {
+          "type": "string",
+          "required": false,
+          "enum": ["A1", "A2", "B1", "B2", "C1", "C2"],
+          "desc": "用户 CEFR 水平，默认取画像"
+        }
+      },
+      "returns": {
+        "cached": "boolean",
+        "mnemonic": "string（记忆口诀）",
+        "wordRoot": "string（词根词缀拆解）",
+        "sceneExamples": "array<{en: string, zh: string, scene: string}>（恰好 3 条）",
+        "confusable": "string（易混词辨析）"
+      },
+      "cost_ms": 2500
+    },
+    {
+      "name": "ask_user",
+      "description": "信息不足时向用户反问。只有无法从上下文确定意图或参数时才可调用；意图明确时禁止调用。",
+      "when": "输入既没有可识别的意图关键词、也没有可识别的单词；或缺少必填参数（如评分缺失）",
+      "params": {
+        "question": { "type": "string", "required": true, "desc": "一句中文提问，给出可选项" }
+      },
+      "returns": {
+        "answer": "string（用户回复）"
+      },
+      "cost_ms": 0
+    },
+    {
+      "name": "finish",
+      "description": "给出最终答复并结束本轮。一次会话的最后一步必须是 finish。",
+      "when": "信息已足够、可以回答用户时",
+      "params": {
+        "answer": { "type": "string", "required": true, "desc": "给用户的最终中文答复" }
+      },
+      "returns": { "ok": "boolean" },
+      "cost_ms": 0
+    }
+  ],
+  "rules": [
+    "一次会话必须以 finish 结束；没有 finish 的轨迹视为不完整",
+    "ask_user 只有两种合法触发：无意图无单词，或缺少必填参数。裸单词（如 'abandon'）不触发",
+    "fsrs_rate 的 rating 只能是 1/2/3/4 整数；超出范围由调用方拒绝，不是模型自行截断",
+    "工具返回 empty=true / found=false 时，模型必须改口（说明没找到），不得编造内容",
+    "同一次会话内不要重复调用参数完全相同的工具"
+  ]
+}
