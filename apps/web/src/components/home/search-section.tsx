@@ -11,7 +11,7 @@
  */
 
 import * as React from 'react';
-import { ARIA, BRAND, LOOKUP_COPY, SEARCH_PLACEHOLDER, VERBS, parseRecentSearchList } from '@tm/shared';
+import { ARIA, LOOKUP_COPY, SEARCH_PLACEHOLDER, VERBS, parseRecentSearchList } from '@tm/shared';
 import {
   ConfirmSheet,
   RecentSearchPanel,
@@ -33,10 +33,9 @@ export interface SearchSectionProps {
   busy: boolean;
   recent: UseRecentSearches;
   /** I-01：已提交过查询 = 常驻上滑态（与 App `LookupScreen` 的 `queried !== ''` 同判据，⛔ 新状态机）。 */
-  hasQuery: boolean;
 }
 
-export function SearchSection({ text, onText, onRun, busy, recent, hasQuery }: SearchSectionProps): React.JSX.Element {
+export function SearchSection({ text, onText, onRun, busy, recent }: SearchSectionProps): React.JSX.Element {
   const barRef = React.useRef<SearchBarHandle>(null);
   const graceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [focused, setFocused] = React.useState(false);
@@ -84,19 +83,9 @@ export function SearchSection({ text, onText, onRun, busy, recent, hasQuery }: S
 
   return (
     <section className="relative">
-      <h1 className="text-center font-bold tracking-tight text-ink text-h1 max-md:text-h1-xs">{BRAND.slogan}</h1>
-      {/* I-01（迭代工单）：与 App `LookupScreen` 同一手法 —— slogan 与搜索框之间的可折叠 spacer，
-          未聚焦且无输入时撑出静态位，聚焦/已查询时高度收 0 平滑上滑。
-          I-03（迭代工单）：静态位降到视口上三分之一（中心 Y ≈ 33%），单一 vh 撑不住两档视口
-          （固定基线 ≈160px 与视口无关），故按 Tailwind 断点分 `md` / `max-md` 两颗高度档。
-          位移只走 CSS `transition-[height]`，时长 = 既有档 `duration-move`（--dur-move），⛔ 魔法毫秒数；
-          配套：`(user)/page.tsx` 列容器去掉 `justify-center`（否则居中会把位移吸收一半）。 */}
-      <div
-        aria-hidden="true"
-        className={`w-full shrink-0 transition-[height] duration-move ease-standard ${
-          focused || hasQuery ? 'h-0' : 'md:h-[23.5vh] max-md:h-[14.2vh]'
-        }`}
-      />
+      {/* bug_list #8（Web 同口径）：删掉 "记不住的，交给明天" 这句 slogan，与 App `LookupScreen` 保持一致。
+          原先 slogan 与搜索框之间那段可折叠 spacer 是为了把搜索框垫到视口上三分之一；
+          slogan 一撤就只剩空白，索性把 section 的间距交给下面的 `mt-3`，搜索框直接落顶部。 */}
       <div className="relative mt-3 w-full scroll-mb-[calc(var(--tab-h)+24px)]">
         <SearchBar
           ref={barRef}

@@ -33,7 +33,7 @@ export default function HomePage(): React.JSX.Element {
       {/* I-01 配套：去掉 `justify-center` —— 「未聚焦居中」改由 `SearchSection` 内可折叠 spacer 承担
           （与 App 同一手法；居中容器会把聚焦上滑的位移吸收一半，收不到 0–22% 档）。 */}
       <div className={`${COLUMN} flex-1 gap-0 pt-10 pb-16`}>
-        <SearchSection text={text} onText={setText} onRun={run} busy={busy} recent={recent} hasQuery={queried !== ''} />
+        <SearchSection text={text} onText={setText} onRun={run} busy={busy} recent={recent} />
         <ReviewCta due={due} href="/study" signedIn={signedIn} loading={loading} className="mt-3" testid="home-review-cta" />
         <ResultSection
           queried={queried}
