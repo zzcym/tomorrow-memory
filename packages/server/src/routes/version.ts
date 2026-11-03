@@ -30,6 +30,29 @@ function readServerVersion(): string {
   }
 }
 
+/**
+ * 读 APK 版本清单（`mobile-memory/version.json`，与 `build-apk.sh` 同一份唯一来源）。
+ * 读不到就返回空串 —— 此时 `latest` 退回服务端版本，等价于"不提示"，绝不猜一个版本号。
+ */
+export function readApkVersion(file: string): { versionName: string; versionCode: number | null } {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as {
+      versionName?: unknown;
+      versionCode?: unknown;
+    };
+    const versionName = typeof parsed.versionName === 'string' ? parsed.versionName.trim() : '';
+    const versionCode =
+      typeof parsed.versionCode === 'number' &&
+      Number.isInteger(parsed.versionCode) &&
+      parsed.versionCode > 0
+        ? parsed.versionCode
+        : null;
+    return { versionName, versionCode };
+  } catch {
+    return { versionName: '', versionCode: null };
+  }
+}
+
 export interface VersionPayload {
   name: 'tomorrow-memory';
   /** 当前服务端版本（发布自检用） */
@@ -38,17 +61,39 @@ export interface VersionPayload {
   latest: string;
   /** APK 直链；未配置为空串，客户端据此不提示 */
   url: string;
+  /** APK 版本码（可选，排查"该升但没升"时用；客户端当前不读它） */
+  latestCode?: number | null;
   notes?: string;
 }
 
 export function createVersionRouter(config: AppConfig): Hono<AuthEnv> {
   const r = new Hono<AuthEnv>();
   const serverVersion = readServerVersion();
+  // 三个新字段在旧测试夹具里可能没有（新增配置项不该把无关用例打崩）⇒ 一律用 ?? 兜底。
+  const apk = readApkVersion(config.apkVersionFile ?? '');
+
+  // latest 的优先级：显式环境变量 > version.json（APK 真实版本）> 服务端版本。
+  // ⚠ 只有前两种来源才允许自动拼下载直链：服务端版本（如 2.0.0）与 APK 版本是两套号，
+  //   拿它拼出来的 `tmword-2.0.0.apk` 必然 404，会让客户端弹一个点了就死的提示。
+  const apkVersionKnown = apk.versionName !== '' || config.appLatestVersion !== '';
+  const latest = config.appLatestVersion || apk.versionName || serverVersion;
+
+  // 直链优先级：显式 APK_DOWNLOAD_URL > 站点前缀 + 版本号拼出的下载路由（app.ts 的 /api/download/:file）。
+  // 两者都不可用 → 空串 → 客户端 normalizeVersionInfo() 归 null → 不提示（不编造直链）。
+  const base = (config.apkDownloadBaseUrl ?? '').replace(/\/+$/, '');
+  const url =
+    (config.apkDownloadUrl ?? '') !== ''
+      ? config.apkDownloadUrl
+      : apkVersionKnown && base !== ''
+        ? `${base}/api/download/tmword-${latest}.apk`
+        : '';
+
   const payload: VersionPayload = {
     name: 'tomorrow-memory',
     version: serverVersion,
-    latest: config.appLatestVersion || serverVersion,
-    url: config.apkDownloadUrl,
+    latest,
+    url,
+    latestCode: apk.versionCode,
     ...(config.appReleaseNotes ? { notes: config.appReleaseNotes } : {}),
   };
 

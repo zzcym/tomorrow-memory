@@ -66,12 +66,18 @@ export interface AppConfig {
    * `@tm/shared/constants/flags` 的 PRD §6.4-7 初值（唯一真相，此处不落第二份默认值）。
    */
   featureFlagsSeedJson: string;
-  /** T-07 / R-17⑨：App 最新版本号（缺省 = 服务端自身版本，不触发提示） */
+  /** T-07 / R-17⑨：App 最新版本号（缺省 = 读 `mobile-memory/version.json`，再缺省 = 服务端自身版本） */
   appLatestVersion: string;
-  /** T-07 / R-17⑨：APK 直链。**未配置时 `GET /api/version` 的 `url` 为空串**，客户端不提示（不编造直链） */
+  /** T-07 / R-17⑨：APK 直链。留空时按 `APK_DOWNLOAD_BASE_URL` + 版本号自动拼（见 `routes/version.ts`） */
   apkDownloadUrl: string;
   /** T-07 / R-17⑨：更新说明（可选） */
   appReleaseNotes: string;
+  /** 2026-11：APK 版本清单文件（唯一来源 `mobile-memory/version.json`，`/api/version` 的 latest 读它） */
+  apkVersionFile: string;
+  /** 2026-11：下载直链的站点前缀，如 `https://tmword.xyz`（空 = 不自动拼直链，等价于"不提示"） */
+  apkDownloadBaseUrl: string;
+  /** 2026-11：APK 存放目录（`GET /api/download/<file>` 只从这里取，默认 DATA_DIR/downloads） */
+  downloadsDir: string;
 }
 
 function str(name: string, fallback = ''): string {
@@ -123,6 +129,11 @@ export function loadConfig(): AppConfig {
     appLatestVersion: str('APP_LATEST_VERSION', ''),
     apkDownloadUrl: str('APK_DOWNLOAD_URL', ''),
     appReleaseNotes: str('APP_RELEASE_NOTES', ''),
+    apkVersionFile: str('APK_VERSION_FILE', path.join(PROJECT_ROOT, 'mobile-memory', 'version.json')),
+    // 站点前缀：给了才会自动拼 `<base>/api/download/tmword-<latest>.apk`。
+    // 默认空 = 老行为（url 为空、客户端不提示），部署时按需打开，绝不编造直链。
+    apkDownloadBaseUrl: str('APK_DOWNLOAD_BASE_URL', ''),
+    downloadsDir: str('DOWNLOAD_DIR', path.join(dataDir, 'downloads')),
   };
 
   if (config.dbDriver === 'pg' && config.databaseUrl === '') {

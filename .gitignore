@@ -140,3 +140,6 @@ gui-test-screenshots/
 mobile-memory/docs/
 *.apk
 *.apk.idsig
+
+# 本地 APK 分发放置区（GET /api/download/<file> 的默认根，服务器上由 DATA_DIR/downloads 承载）
+/downloads/

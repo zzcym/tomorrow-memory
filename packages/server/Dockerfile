@@ -37,6 +37,10 @@ COPY --from=builder /app/packages/shared ./packages/shared
 COPY --from=builder /app/packages/agent ./packages/agent
 COPY --from=builder /app/packages/server/package.json ./packages/server/
 COPY --from=builder /app/package.json ./package.json
+# APK 版本清单：`/api/version` 的 latest 读它（与 build-apk.sh 同一份唯一来源）。
+# 不烤进来的话容器里读不到 → latest 退回服务端版本 → 更新提示永远不弹（或弹一个 404 直链）。
+# 构建上下文是仓库根（deploy.yml 的 context: .），故这一行能拿到 mobile-memory/version.json。
+COPY mobile-memory/version.json ./mobile-memory/version.json
 
 EXPOSE 3001
 CMD ["pnpm", "--filter", "@tm/server", "start"]

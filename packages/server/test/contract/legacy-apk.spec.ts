@@ -180,6 +180,10 @@ async function open(label: string): Promise<Harness> {
       appLatestVersion: '9.9.9',
       apkDownloadUrl: '',
       appReleaseNotes: '',
+      // 2026-11 新增：/api/version 的 APK 版本来源与下载目录（这两条用例不碰版本提示）
+      apkVersionFile: '',
+      apkDownloadBaseUrl: '',
+      downloadsDir: '',
     },
     db,
     sms: {

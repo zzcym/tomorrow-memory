@@ -269,6 +269,24 @@ export function createApp(deps: AppDeps): AppRuntime {
   app.route('/', createReviewRouter(db, { events }));
   app.route('/', createAnalystRouter(db, { analyst, llmRouter }));
 
+  // ===== APK 下载（R-17⑨：`/api/version` 的 url 指向这里）=====
+  // 只认 `tmword-<版本>.apk` 这一种文件名，且只从 config.downloadsDir 取（默认 DATA_DIR/downloads）。
+  // 文件名走白名单正则、不接受任何路径分隔符 ⇒ 没有目录穿越面。
+  app.get('/api/download/:file', (c) => {
+    const file = c.req.param('file');
+    if (!/^tmword-[0-9][A-Za-z0-9.+-]*\.apk$/.test(file)) return c.notFound();
+    const dir = config.downloadsDir ?? path.join(config.dataDir ?? '', 'downloads');
+    const full = path.join(dir, file);
+    if (!fs.existsSync(full)) return c.notFound();
+    const body = fs.readFileSync(full);
+    return c.body(body, 200, {
+      'Content-Type': 'application/vnd.android.package-archive',
+      'Content-Length': String(body.byteLength),
+      'Content-Disposition': `attachment; filename="${file}"`,
+      'Cache-Control': 'public, max-age=300',
+    });
+  });
+
   // ===== 静态文件：只服务专用 public 目录（绝不指向仓库根，避免 .env/数据库/备份外泄） =====
   app.get('/admin', (c) => {
     const adminHtml = path.join(config.publicDir, 'admin.html');
