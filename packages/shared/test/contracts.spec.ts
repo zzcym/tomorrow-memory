@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
  * 由 `vite/client` 提供 —— `@tm/shared` 的依赖树里没有 `vite`（只有根 `vitest`），
  * `"types": ["vite/client"]` 在本包内解析不到（实测 TS2688）。故这里就地补一条与 vite/client
  * 同形状的最小声明；等 `packages/shared/package.json` 加上 `vite`（越界申请见
- * `.delivery/04-dev-report-T-02-fix1.md`）后，改回 `"types": ["vite/client"]` 并删掉这一块。 */
+ * `交付记录 04-dev-report-T-02-fix1.md`）后，改回 `"types": ["vite/client"]` 并删掉这一块。 */
 interface TmGlobOptions {
   query?: string;
   import?: string;
@@ -216,7 +216,7 @@ const BANNED_TERMS_LOCAL = [
   // ⚠ 全库唯一保留的"拆写"，且**不是文案禁词**：`deadline-key-zero` 对该驼峰键名要求全库 0 命中、
   // 且 `noExceptions: true`（无例外通道，见 boundaries.mjs 断言注册表）。实测证明：只要在本文件里
   // 写成连续字面量，`--password` 立刻 `RED deadline-key-zero 1 处命中`（受控复现见
-  // `.delivery/04-dev-report-T-02-fix2.md`）。还原它 = 把门禁判红，而不改禁词表的铁律在先，
+  // `交付记录 04-dev-report-T-02-fix2.md`）。还原它 = 把门禁判红，而不改禁词表的铁律在先，
   // 故此处保留拆写并在下面的"零绕扫描"用例里显式登记为唯一例外（登记 ≠ 豁免，词表条数与内容仍被锁死）。
   'password' + 'Upgrade' + 'Deadline',
   '忘记密码', '找回密码', '本期无法找回', '请用其他手机号注册',
@@ -886,7 +886,7 @@ describe('C-11：连胜计算唯一实现', () => {
 
 /* ═════════ A-28-4：复习域 5 码收编进 TM_ERRORS_SUPPLEMENT（追加件，不动上面任何一条） ═════════
  *
- * 判据来自 `.delivery/04-adjudications.md` A-28 第 4 行：
+ * 判据来自 `交付记录 04-adjudications.md` A-28 第 4 行：
  *  ① §4.6 冻结面（`TM_ERROR_CODES` 18 码 / `TM_ERROR_ROWS` 16 行 / `TM_ERRORS`）一字不动；
  *  ② 5 码进 `TM_ERRORS_SUPPLEMENT`，带 `http` 与 `from: 'R-02③④⑥ / T-10 D-1'`；
  *  ③ `copy` 由 `RATING_VALUES / RATING_LABELS / MODE_VALUES / MODE_LABELS / WORD_MAX_LENGTH /
@@ -1067,15 +1067,15 @@ describe('T-03r5 PROGRESS_COPY 九键上收 + D 区同源不变式哨', () => {
 
 /* ═════════════════════════ T-19g-i「我的」页四处定稿串/数值上收 ═════════════════════════
  *
- * 缺口 G-1 / G-2 / G-3 / G-4（登记处 `.delivery/04-dev-report-T-19-e.md` §遗留）。
+ * 缺口 G-1 / G-2 / G-3 / G-4（登记处 `交付记录 04-dev-report-T-19-e.md` §遗留）。
  * 处置 = 从 UI 规范 §3.8 **逐字上收**（先例：T-03r 系 / A-43 #76「取 §3.6.5 逐字上收」）。
  * 纪律：期望值在本测试里**另抄一份规范原文**，shared 里那一份若走样（含间隔号、空格、句号）即红。
  * 本轮只补 shared；屏不接三卡（接驳归 T-19g-ii），屏侧的哨在 `apps/app/test/me-screen.spec.tsx` A-06/A-07。
  */
 
-/** `.delivery/03-ui-spec.md:954`（§3.8.1 分区 C 那一行的三格，逐字；N 是数字位）。 */
+/** `交付记录 03-ui-spec.md:954`（§3.8.1 分区 C 那一行的三格，逐字；N 是数字位）。 */
 const UI_SPEC_3_8_1_STAT_ROW = ['词本 N 词', '累计复习 N 天', '连续 N 天'] as const;
-/** `.delivery/03-ui-spec.md:1001`（§3.8.5「拉取失败」行的四格，逐字）。 */
+/** `交付记录 03-ui-spec.md:1001`（§3.8.5「拉取失败」行的四格，逐字）。 */
 const UI_SPEC_3_8_5_FETCH_FAIL_ROW = {
   title: '账号信息没拿到',
   body: '检查网络后再试一次，你的数据没有改动。',
