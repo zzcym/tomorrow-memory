@@ -8,7 +8,7 @@
  *
  * **为什么直接挂 `WordDetailScreen` 而不挂 `AppRoutes`**：`apps/app/src/router.tsx` 在
  * `tools/ownership.json` 里对 T-17 是 `zeroDiffFor`（禁改），路由注册需求写在
- * `.delivery/04-dev-report-T-17.md`「路由注册需求」一节。本文件用 `resetRouterForTest('/word/happy?from=…')`
+ * 交付记录 T-17「路由注册需求」一节（原件已移出仓库）。本文件用 `resetRouterForTest('/word/happy?from=…')`
  * 造出真实 Location（`params.word` + `query.from` 走的是 `router.tsx` 自己的 `parseHash`），
  * 再挂本屏 ⇒ 页面读参的方式与注册后完全一致。
  *

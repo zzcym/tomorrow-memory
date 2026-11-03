@@ -314,7 +314,7 @@ export interface ZhResultListProps {
    * 行内喇叭（**第 2 轮补**：UI §3.2 末段写死"中→英每条 = 词 + 首义 + 喇叭"，
    * `LookupResultBar` 的 `onSpeak` 缺省即不渲染喇叭 ⇒ 第 1 轮这件组件漏了这一个 prop，
    * 中译英结果页 0 个喇叭 = R-14④ 不成立。改动为**纯新增可选 prop**，逐字登记在
-   * `.delivery/04-dev-report-T-17.md` §1）。
+   * 交付记录 T-17 §1，原件已移出仓库）。
    */
   onSpeak?: (word: string) => void;
   /** 发音不可用（R-14⑥）：喇叭保持可点，点击给行内提示。 */

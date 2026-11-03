@@ -2097,7 +2097,7 @@ describe('M 组 · :998 访客引导条（B 区替换）与 :1001 拉取失败�
     commitLocation(ME_PATH, false);
     window.location.hash = `#${ME_PATH}`;
     await click(buttonByLabel(AUTH_COPY.submit.register)!);
-    // E5-register 翻转申报（逐字改前/改后与理由见 .delivery/04-dev-report-E5-register.md）：
+    // E5-register 翻转申报（逐字改前/改后与理由见交付记录 E5-register，原件已移出仓库）：
     // 旧钉「注册也落 #/login、不造 #/register」的前提（LoginScreen 的 mode 无 URL 驱动入口）已真修 ⇒ 「注册」落 #/register。
     expect(window.location.hash).toBe('#/register');
     expect(fetchCalls).toHaveLength(before); // 点钮只换地址，0 请求

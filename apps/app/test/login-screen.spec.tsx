@@ -401,7 +401,7 @@ describe('B 组 · 源码哨兵机检', () => {
      *    `'/api/password/force'` 顶掉，两面互不吞并）。
      *  ② **拦截断言不得变少** —— 翻正之后本用例的 `not.toMatch` 从 2 条变 3 条（原 `fetch|localStorage`
      *    一条未动，另把被翻掉的那条换成"假想第三面不得预写"），正面计数从 7 条增到 11 条。
-     *  ③ **明示声明** —— 本条改判由 `.delivery/04-dev-report-T-19-d.md` §② 的"peer 哨兵改判"一节逐句交底；
+     *  ③ **明示声明** —— 本条改判由交付记录 T-19-d §② 的"peer 哨兵改判"一节逐句交底（原件已移出仓库）；
      *    同轮另在 `security-screen.spec.tsx` A-06 / I-04 独立钉一遍，两处不互相背书。
      */
     expect(queries.match(/export function changePasswordMutationOptions/g)).toHaveLength(1);

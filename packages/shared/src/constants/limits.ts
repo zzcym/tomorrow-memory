@@ -107,7 +107,7 @@ export const DAILY_GOAL_DEFAULT = 10;
 export const DAILY_GOAL_MIN = 1;
 export const DAILY_GOAL_MAX = 200;
 /**
- * UI §3.8.3 逐字（`.delivery/03-ui-spec.md:979`「参数：`min=5 max=50 step=5`，默认 `10`」）：
+ * UI §3.8.3 逐字（`交付记录 03-ui-spec.md:979`「参数：`min=5 max=50 step=5`，默认 `10`」）：
  * 每日目标**滑杆**的取值域（缺口 G-1 · T-19g-i 上收）。数值，不是文案。
  * 与上面三条的关系 = **UI 域 ⊂ 契约域**：契约域（`DAILY_GOAL_MIN`/`MAX`）是服务端接受的入参域，
  * UI 域是滑杆能滑出来的域。四条不变式钉在 `packages/shared/test/contracts.spec.ts`
