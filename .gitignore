@@ -131,3 +131,13 @@ ai-hw1/
 pdf_extract/
 vibe_images/
 gui-test-screenshots/
+
+# ---- 2026-11-04 清理：agent 会话产物 / 构建产物，一律不入库 ----
+# 这些曾把别的会话的产出（周计划、抽检报告、交付台账、旧 APK）带进仓库与 GitHub。
+/docs/
+.delivery/
+/TEST-REPORT.md
+/TEST-REPORT.pdf
+mobile-memory/docs/
+*.apk
+*.apk.idsig
