@@ -114,8 +114,15 @@ function Flashcard(
   const [dragging, setDragging] = React.useState(false);
   const origin = React.useRef({ x: 0, y: 0 });
   const axis = React.useRef<'x' | 'y' | null>(null);
+  /**
+   * bug_list #7：横滑**不再要求先翻面**（原先 `side === 'back'` 是唯一门槛）。
+   * 放开之后正面多出一个副作用：正面整卡是一颗「显示释义」按钮（`.Flashcard.tsx` 下方的覆盖层），
+   * 手指滑完松手时浏览器还会补一次 click，那一下会把卡翻过去 —— 于是用这枚 ref 把
+   * 「刚滑过」的那次 click 在捕获阶段吞掉（`onClickCapture` 挂在卡片容器上）。
+   */
+  const swipedRef = React.useRef(false);
 
-  const swipeOn = swipeSubmit && onSwipeRating !== undefined && !noGloss && side === 'back';
+  const swipeOn = swipeSubmit && onSwipeRating !== undefined && !noGloss;
 
   const submitSwipe = (travel: number): void => {
     if (!onSwipeRating) return;
@@ -130,6 +137,7 @@ function Flashcard(
     if (!swipeOn || event.button !== 0) return;
     origin.current = { x: event.clientX, y: event.clientY };
     axis.current = null;
+    swipedRef.current = false;
     setDragging(true);
   };
 
@@ -141,6 +149,7 @@ function Flashcard(
       axis.current = Math.abs(my) > VERTICAL_ABORT_PX && Math.abs(my) > Math.abs(mx) ? 'y' : 'x';
     }
     if (axis.current !== 'x') return;
+    if (Math.abs(mx) >= PILL_PX) swipedRef.current = true;
     setDx(mx);
   };
 
@@ -225,6 +234,13 @@ function Flashcard(
         onPointerCancel={() => {
           setDragging(false);
           setDx(0);
+        }}
+        /* bug_list #7：刚横滑过的那一次 click 在捕获阶段吞掉 —— 否则正面松手会顺带翻面。 */
+        onClickCapture={(event) => {
+          if (!swipedRef.current) return;
+          swipedRef.current = false;
+          event.preventDefault();
+          event.stopPropagation();
         }}
         style={{ transform: `translateX(${String(dx)}px)` }}
         className={cn(

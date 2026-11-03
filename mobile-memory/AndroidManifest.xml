@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.tomorrow.memory"
-    android:versionCode="1"
-    android:versionName="1.0.0">
+    android:versionCode="2"
+    android:versionName="1.1.0">
+    <!-- 版本号是 version.json 的镜像：构建时 aapt2 的 version-code / version-name 参数以
+         version.json 为准，这里保持一致只是为了让直接读 manifest 的人和工具不看到过期值。
+         发版只改 version.json。（注：XML 注释里不能出现两个连续短横线，故此处不写命令行原文。） -->
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34"/>
 

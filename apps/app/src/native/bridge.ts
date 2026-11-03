@@ -25,6 +25,10 @@ export interface AndroidBridgeLike {
   clearTempToken?: () => void;
   clearToken?: () => void;
   getAppVersion?: () => string | null;
+  /** bug_list #1：身份（手机号/昵称）与 token 一样双写，避免 localStorage 被清后"登录着但没身份"。 */
+  saveIdentity?: (phone: string, nickname: string) => void;
+  /** 返回 `phone\nnickname`（老 APK 无此方法 ⇒ 特性探测后回落 localStorage）。 */
+  readIdentity?: () => string | null;
 }
 
 declare global {
@@ -106,8 +110,43 @@ export function writeToken(token: string | null): void {
 }
 
 export function writeIdentity(phone: string | null, nickname: string | null): void {
-  kvSet(PHONE_KEY, phone);
-  kvSet(NICKNAME_KEY, nickname);
+  const p = phone ?? '';
+  const n = nickname ?? '';
+  kvSet(PHONE_KEY, p || null);
+  kvSet(NICKNAME_KEY, n || null);
+  const b = bridge();
+  try {
+    // 传空串 = 清除（退出登录 / 401 与 token 一起清）
+    b?.saveIdentity?.(p, n);
+  } catch {
+    /* 非 WebView 环境 */
+  }
+}
+
+/**
+ * 读身份（手机号 / 昵称）。三级回落与 `readToken` 同形：桥 → localStorage → 空串。
+ * 并做**反向回灌**：SharedPreferences 里有、localStorage 被系统清掉的，这里补回去
+ * （bug_list #1：升级后"登录着但手机号昵称为空、若干界面显示异常"就是这一处缺的）。
+ */
+export function readIdentity(): { phone: string; nickname: string } {
+  const b = bridge();
+  let phone = '';
+  let nickname = '';
+  try {
+    const raw = b?.readIdentity ? String(b.readIdentity() ?? '') : '';
+    if (raw) {
+      const cut = raw.indexOf('\n');
+      phone = cut < 0 ? raw : raw.slice(0, cut);
+      nickname = cut < 0 ? '' : raw.slice(cut + 1);
+    }
+  } catch {
+    /* 老 APK 无此方法 */
+  }
+  if (!phone) phone = kvGet(PHONE_KEY) ?? '';
+  if (!nickname) nickname = kvGet(NICKNAME_KEY) ?? '';
+  if (phone && !kvGet(PHONE_KEY)) kvSet(PHONE_KEY, phone);
+  if (nickname && !kvGet(NICKNAME_KEY)) kvSet(NICKNAME_KEY, nickname);
+  return { phone, nickname };
 }
 
 /** 401 单点登出用（rest-fetcher 是本函数在 App 内的唯一调用点）。 */

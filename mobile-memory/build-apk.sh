@@ -17,7 +17,8 @@
 #   APK_KEYSTORE       keystore 路径（默认 <本目录>/keystore.jks —— 仓库内那一份，严禁重建）
 #   APK_KEY_ALIAS      签名别名（默认 agenda）
 #   APK_APP_DIST       前端产物目录（默认 <repo>/apps/app/dist，R-17① 的 file:// 产物）
-#   GIT_TAG / APK_OUT  产物版本号 / 产物路径（CI 上可指定为 明日记忆.apk 等分发名）
+#   APK_VERSION / APK_VERSION_CODE  版本号 / 版本码覆盖（缺省读 mobile-memory/version.json；CI 用）
+#   APK_OUT            产物路径（缺省 tmword-<versionName>.apk）
 #
 # 用法： bash mobile-memory/build-apk.sh [--dry-run] [--skip-app-build] [--assets DIR] [--out FILE]
 #                                        [--no-fingerprint] [-h|--help]
@@ -59,6 +60,16 @@ SEP=":"; [ -n "$IS_WIN" ] && SEP=";"
 
 canon() {
   local p="$1"
+  # MSYS 形路径 /e/xxx → E:/xxx：先走纯 bash 转换，不依赖 cygpath。
+  # 理由（本机实测）：PATH 上若有 Anaconda 自带的 cygpath，它把 /e/... 当作相对路径，
+  # 拼成 E:\Anaconda3\Library\e\...，于是 JAVA_HOME 怎么指都"找不到 java"。
+  case "$p" in
+    /[a-zA-Z]/*)
+      local rest="${p#/}"
+      printf '%s' "$(printf '%s' "$rest" | sed -E 's#^([a-zA-Z])/#\1:/#')"
+      return 0
+      ;;
+  esac
   if [ -n "$IS_WIN" ] && command -v cygpath >/dev/null 2>&1; then
     cygpath -w "$p" | tr '\\' '/'
   else
@@ -143,7 +154,10 @@ if [ -z "$PYTHON" ]; then
 fi
 
 # keystore：仓库内那一份，缺失即停（RK-13 严禁重建）
-KEYSTORE="${APK_KEYSTORE:-$HERE/keystore.jks}"
+# 默认签名钥匙 = keystore-v3.jks（在册指纹 29f0b47e… 见 keystore-cert.sha256 的"第三次换签名代"一节）。
+# keystore.jks / keystore-v2.jks 是前两代，原地保留仅作历史留档，绝不作默认值
+# （用它们签出来的包与基线不符，fingerprint.mjs 会直接红）。
+KEYSTORE="${APK_KEYSTORE:-$HERE/keystore-v3.jks}"
 [ -f "$KEYSTORE" ] || fail "找不到签名 keystore：$KEYSTORE。按 RK-13 **严禁 keytool 重新生成**（签名标识一变，存量用户无法覆盖安装 = 只能卸载重装并丢本机数据）。请从 CI secret / 仓库外双备份处把**原件**放回该路径，或用 APK_KEYSTORE=<路径> 指到它；CI 上由 secret 落盘。本脚本不会自签兜底。"
 KEYSTORE_WIN="$(canon "$KEYSTORE")"
 KEY_ALIAS="${APK_KEY_ALIAS:-agenda}"
@@ -194,13 +208,36 @@ check_dom_storage() {
   say "  DOM storage 检查通过：$(grep -n 'setDomStorageEnabled(true)' "$src" | head -1 | cut -d: -f1)行"
 }
 
-# ---------- ③ 产物名 ----------
-VERSION="${GIT_TAG:-${APK_VERSION:-dev}}"
-VERSION="${VERSION#v}"
+# ---------- ③ 产物名与版本号（bug_list #9/#10：禁止日期命名，语义化版本）----------
+# 版本号唯一来源 = mobile-memory/version.json。
+# APK_VERSION / APK_VERSION_CODE 仍可显式覆盖（CI 用），但不再回落成 dev 或日期。
+read_version_json() { # $1 = 字段名
+  "${NODE:-node}" -e 'const f=require("fs");try{const j=JSON.parse(f.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j[process.argv[2]]??""))}catch(e){}' \
+    "$HERE/version.json" "$1" 2>/dev/null || true
+}
+
+VERSION_NAME="${APK_VERSION:-}"
+VERSION_CODE="${APK_VERSION_CODE:-}"
+if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
+  NODE="${NODE:-node}"
+  command -v "$NODE" >/dev/null 2>&1 || fail "找不到 node：解析 version.json 需要它（或用 APK_VERSION / APK_VERSION_CODE 显式给值）"
+  [ -n "$VERSION_NAME" ] || VERSION_NAME="$(read_version_json versionName)"
+  [ -n "$VERSION_CODE" ] || VERSION_CODE="$(read_version_json versionCode)"
+fi
+VERSION_NAME="${VERSION_NAME#v}"
+[ -n "$VERSION_NAME" ] || fail "version.json 里没有 versionName，且未给 APK_VERSION —— 版本号必须显式存在，不许回落成 dev/日期（bug_list #9）。"
+case "$VERSION_NAME" in
+  [0-9]*.[0-9]*) : ;;
+  *) fail "版本号 '$VERSION_NAME' 不是三段式（示例 1.1.0）。bug_list #9 禁止日期式命名。" ;;
+esac
+[ -n "$VERSION_CODE" ] || fail "version.json 里没有 versionCode（整数，发版必须 +1，否则无法覆盖安装）。"
+case "$VERSION_CODE" in *[!0-9]*) fail "versionCode 必须是整数，收到 '$VERSION_CODE'" ;; esac
+
+VERSION="$VERSION_NAME"
 OUT="${OUT_OVERRIDE:-$HERE/tmword-${VERSION}.apk}"
 OUT_WIN="$(canon "$OUT")"
-# 默认产物名带 tmword- 前缀，不会碰到 legacy 手写版那份未提交的 明日记忆.apk；
-# 分发名（R-17⑧ 的 明日记忆.apk）由 CI 显式 --out 指定，本脚本不擅自改名。
+# 产物名 = tmword-<versionName>.apk（bug_list #10）。默认带 tmword- 前缀，不会碰到 legacy 手写版
+# 那份未提交的 明日记忆.apk；分发名由 CI 显式 --out 指定，本脚本不擅自改名。
 
 say "===== 构建环境（全部来自环境变量，脚本内无绝对路径 / 无口令字面量）====="
 say "  JAVA_HOME   = $JAVA_HOME_N"
@@ -210,6 +247,7 @@ say "  PLATFORM    = $PLATFORM"
 say "  PYTHON      = $PYTHON"
 say "  KEYSTORE    = $KEYSTORE_WIN (alias=$KEY_ALIAS；口令只从环境变量 APK_KEYSTORE_PASS 经 env: 传入，脚本与日志都不落口令)"
 say "  APP DIST    = $(canon "$DIST")"
+say "  VERSION     = $VERSION_NAME (versionCode=$VERSION_CODE，来自 version.json)"
 say "  OUT         = $OUT_WIN"
 say "  DRY_RUN     = $DRY_RUN"
 
@@ -219,7 +257,7 @@ if [ "$DRY_RUN" = "1" ]; then
   say ""
   say "[dry-run] 环境解析完毕，将要执行的命令序列："
   say "  1) $AAPT2 compile --dir res -o build/res.zip"
-  say "  2) $AAPT2 link -o build/base.apk -I $PLATFORM --manifest AndroidManifest.xml -A build/assets --java build/gen --auto-add-overlay build/res.zip"
+  say "  2) $AAPT2 link -o build/base.apk -I $PLATFORM --manifest AndroidManifest.xml --version-code $VERSION_CODE --version-name $VERSION_NAME -A build/assets --java build/gen --auto-add-overlay build/res.zip"
   say "  3) $JAVAC_BIN -source 17 -target 17 -encoding UTF-8 -classpath \"$PLATFORM${SEP}build/gen\" -d build/classes @build/sources.txt"
   say "  4) $JAVA_BIN -cp $D8_JAR com.android.tools.r8.D8 --release --min-api 26 --lib $PLATFORM --output build/dex <classes>"
   say "  5) $PYTHON scripts/assemble_apk.py build/base.apk build/dex/classes.dex build/apk/app.unsigned.apk"
@@ -244,6 +282,8 @@ say "[1/6] aapt2 编译资源 + 链接（含 assets 与 manifest）"
 "$AAPT2" link -o build/base.apk \
   -I "$PLATFORM" \
   --manifest AndroidManifest.xml \
+  --version-code "$VERSION_CODE" \
+  --version-name "$VERSION_NAME" \
   -A build/assets \
   --java build/gen \
   --auto-add-overlay \

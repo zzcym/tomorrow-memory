@@ -188,7 +188,12 @@ const preset: Partial<Config> = {
       width: { tap: 'var(--tap)', sidebar: '320px' },
 
       /* UI §1.7-③ / §2.4：列表底部安全留白 = tab + 安全区 + 16px（替代现网 130px 死占位） */
-      padding: { 'safe-bottom': 'calc(var(--tab-h) + env(safe-area-inset-bottom) + var(--sp-4))' },
+      /* bug_list #4：App 顶部状态栏留白。`env(safe-area-inset-top)` 在多数 Android WebView 里是 0，
+         所以取「安全区」与「12px 最小呼吸位」的较大值 —— 刘海机不留缝、普通机不贴边。 */
+      padding: {
+        'safe-bottom': 'calc(var(--tab-h) + env(safe-area-inset-bottom) + var(--sp-4))',
+        'safe-top': 'max(env(safe-area-inset-top), var(--sp-3))',
+      },
       margin: { 'safe-bottom': 'calc(var(--tab-h) + env(safe-area-inset-bottom))' },
 
       /* UI §1.10/§2.4 尺度层 */

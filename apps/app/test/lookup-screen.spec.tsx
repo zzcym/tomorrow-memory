@@ -27,6 +27,21 @@ import { LOOKUP_COPY, WORDBOOK_COPY } from '@tm/shared';
 import LookupScreen, { planSubmit } from '../src/screens/LookupScreen.js';
 import { WORDBOOK_APP_COPY } from '../src/components/wordbook-toolbar.js';
 import { SYNC_STATE_KEY } from '../src/data/offline-queue.js';
+
+/**
+ * bug_list #3 起「查词命中即自动入库」：查过 happy 之后本地队列里本来就有一条 upsert。
+ * 所以"写盘失败时没写成"只能按**条数不变**判，不能再按"队列为空"判。
+ */
+function pendingUpsertCount(): number {
+  const raw = localStorage.getItem(SYNC_STATE_KEY);
+  if (!raw) return 0;
+  try {
+    const parsed = JSON.parse(raw) as { pendingUpserts?: unknown[] };
+    return Array.isArray(parsed.pendingUpserts) ? parsed.pendingUpserts.length : 0;
+  } catch {
+    return 0;
+  }
+}
 import { navigate, resetRouterForTest } from '../src/router.js';
 import type { UiHost } from '@tm/ui';
 
@@ -562,6 +577,7 @@ describe('判据⑥ 未登录可查可读 + 点收藏走登录（R-16①② / R-
 
     const star = querySelector<HTMLElement>('[data-testid=lookup-result-bar] button[aria-pressed]')!;
     expect(star.getAttribute('aria-pressed')).toBe('false');
+    const beforeUpserts = pendingUpsertCount();
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError');
     });
@@ -577,8 +593,8 @@ describe('判据⑥ 未登录可查可读 + 点收藏走登录（R-16①② / R-
       expect((failure?.[1] as { tone?: string } | undefined)?.tone).toBe('error');
       /* §6.6：反馈串里不许出现内部名词 */
       expect(String(failure?.[0])).not.toMatch(/云端|本地|缓存|未接入|token|数据源/);
-      /* 内存兜底没被当成写成了：盘上压根没有这条队列 */
-      expect(localStorage.getItem(SYNC_STATE_KEY)).toBeNull();
+      /* 内存兜底没被当成写成了：这次收藏没往队列里多加一条（自动入库那一条是查词时写的） */
+      expect(pendingUpsertCount()).toBe(beforeUpserts);
     } finally {
       spy.mockRestore();
     }

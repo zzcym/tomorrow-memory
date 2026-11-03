@@ -175,6 +175,7 @@ import {
   DAILY_GOAL_DEFAULT,
   DAILY_GOAL_UI_MAX,
   DAILY_GOAL_UI_MIN,
+  DAILY_GOAL_UI_PRESETS,
   DAILY_GOAL_UI_STEP,
   NAV_ITEMS,
   SETTINGS_COPY,
@@ -231,15 +232,18 @@ const PROGRESS_ROUTE = '/progress';
 /** D 区右侧按钮 `去背单词` 的落点 = 背单词 tab（`#/study`）。 */
 const STUDY_ROUTE = '/study';
 
-/** §3.8.3 逐字：`min=5 max=50 step=5`；自 T-19g-ii 起唯一源 = shared `limits.ts:119-121`（屏内 0 第二副本）。导出供用例钉"⊂ 契约域"。 */
+/**
+ * 滑杆域自 T-19g-ii 起唯一源 = shared `limits.ts`（屏内 0 第二副本）。导出供用例钉"⊂ 契约域"。
+ * bug_list #6：不再是 `step=5 / max=50`，而是 `step=1 / max=200` —— 连续可调，且不再人为封顶。
+ */
 export const GOAL_SLIDER = {
   min: DAILY_GOAL_UI_MIN,
   max: DAILY_GOAL_UI_MAX,
   step: DAILY_GOAL_UI_STEP,
 } as const;
 
-/** 刻度两端的人话：`SETTINGS_COPY.dailyGoal.value(n)` = `${n} 词`（单位 `词` 的唯一声明点是 `DAILY_GOAL_LABELS`）。 */
-const SLIDER_TICKS: readonly number[] = [GOAL_SLIDER.min, GOAL_SLIDER.max];
+/** 刻度：两端 + 三个常用档，均匀铺开（值与位置近似对齐，只做视觉参照）。 */
+const SLIDER_TICKS: readonly number[] = [GOAL_SLIDER.min, 50, 100, 150, GOAL_SLIDER.max];
 
 const clampToSlider = (n: number): number => {
   if (!(n >= GOAL_SLIDER.min)) return GOAL_SLIDER.min;
@@ -651,6 +655,31 @@ export default function MeScreen(): React.JSX.Element {
             <span className="ml-auto text-sm text-ink-muted tnum">
               {SETTINGS_COPY.dailyGoal.value(goal)}
             </span>
+          </div>
+
+          {/* bug_list #6：滑杆改成 step=1 的连续可调，再补一排快捷档位 —— 
+              单手拖动只出 1 词的粒度，要「10 / 20 / 50 / 100」时点一下就到位。 */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {DAILY_GOAL_UI_PRESETS.map((preset) => {
+              const active = goal === preset;
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  aria-label={SETTINGS_COPY.dailyGoal.value(preset)}
+                  aria-pressed={active}
+                  onClick={() => setDraft(preset)}
+                  className={
+                    'min-h-tap rounded-lg border px-3 text-sm tnum focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 ' +
+                    (active
+                      ? 'border-brand bg-brand-soft text-brand-strong'
+                      : 'border-hair bg-surface text-ink')
+                  }
+                >
+                  {preset}
+                </button>
+              );
+            })}
           </div>
 
           <input

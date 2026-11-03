@@ -1,0 +1,9 @@
+{
+  "$comment": "APK 版本号唯一来源（bug_list #9/#10）。改这里，构建脚本自动落到 AndroidManifest（经 aapt2 --version-code/--version-name）与产物名。",
+  "versionName": "1.1.0",
+  "versionCode": 2,
+  "naming": {
+    "rule": "语义化：小修 1.1.0→1.1.1；成批功能/修复 1.1→1.2；架构级改动 1.x→2.0。禁止用日期命名。",
+    "apk": "tmword-<versionName>.apk"
+  }
+}

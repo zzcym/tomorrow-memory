@@ -831,11 +831,18 @@ describe('S-13~S-14 R-11② 滑动提交', () => {
     await settle();
     expect(postCount('/api/review')).toBe(0);
     expect(container.textContent).toContain('第 1 张，共 3 张');
-    /* 正面不许有横滑提交（`swipeOn` 只在背面成立） */
+    /* bug_list #7：正面**也**允许横滑提交（原先 `swipeOn` 只在背面成立，必须先翻面）。
+       这里钉两件事：正面确实挂了 `touch-pan-y`；不翻面直接右滑能提交一次评分。 */
     unmount();
     render('/study');
     await settle();
-    expect(dragLayer().className).not.toContain('touch-pan-y');
+    expect(dragLayer().className).toContain('touch-pan-y');
+    const front = dragLayer();
+    pointer(front, 'pointerdown', 300, 200);
+    pointer(front, 'pointermove', 300 + 80, 200); // 80px > 阈值 64px ⇒ 右滑 = 太简单
+    pointer(front, 'pointerup', 300 + 80, 200);
+    await settle();
+    expect(postCount('/api/review')).toBe(1);
   });
 });
 

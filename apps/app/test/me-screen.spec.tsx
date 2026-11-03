@@ -669,7 +669,9 @@ describe('A 组 · 源码哨兵（零自造 / 三个既有读点+一条写点 / 
        新增的两颗是 F 区行件（局部 `SettingRow` 内部那一颗，三行共用同一个源码位）与 G 区退出登录触发钮；
        F 区"三行"在源码上只贡献一次 `<button`，因为它们是同一个组件的三个调用点。
        三张计数卡仍是 @tm/ui StatCard 内部渲染的按钮，不在此面。 */
-    expect(code.match(/<button/g) ?? []).toHaveLength(8);
+    /* bug_list #6 判据翻面账：八颗 → **九颗**。新增的一颗是每日目标快捷档
+       （`DAILY_GOAL_UI_PRESETS.map` 里那一颗，源码只写一次，运行期渲染 4 颗）。 */
+    expect(code.match(/<button/g) ?? []).toHaveLength(9);
     /* T-19g-v 判据翻面账：五颗 → **八颗**。新增的三颗都在 `:998` 访客引导条（主按钮「登录」、
        次按钮「注册」、下方收起文字「先不用，继续本机使用」，源码各写一次）；
        `:1001` 错误卡用 `@tm/ui` EmptyState 装配，它的两颗按钮由 ui 内部渲染、不记在屏源码账上。 */
@@ -1103,7 +1105,7 @@ describe('E 组 · passwordUpgradeEnforce=off 的软告知入口那一行（读 
     await settle();
     expect(visibleTexts()).not.toContain(SETTINGS_COPY.upgradeTodo.entry);
     expect(buttonByLabel(SETTINGS_COPY.upgradeTodo.cta)).toBeNull();
-    expect(buttons()).toHaveLength(9); // T-19g-iii 起：三张计数卡 + D 区「去背单词」+「保存」+ F 区三行 + G 区触发钮；「去更新」不出现
+    expect(buttons()).toHaveLength(13); // +4 = bug_list #6 的四个每日目标快捷档（10/20/50/100）
   });
 
   it('E-02 软告知会话：一行两槽逐字 = SETTINGS_COPY.upgradeTodo.entry / .cta，且全树恰一颗「去更新」', async () => {
@@ -1367,7 +1369,7 @@ describe('G 组 · C 区三卡（§3.8.1:954 逐字 + :961 落点；E4b2 件3 �
     expect(texts).toContain(SETTINGS_COPY.dailyGoal.label); // E 区只等 profile，不受牵连
     /* 常态 9 颗可点面（G-01/D-01 口径）减去「连续」卡与 D 区「去背单词」两颗 = 7：
        档案源两卡 +「保存」+ F 区三行 + G 区触发钮；没有半截的 0 卡、也没有第三种补位控件。 */
-    expect(buttons()).toHaveLength(7);
+    expect(buttons()).toHaveLength(11); // +4 = 每日目标快捷档（bug_list #6）
     expect(toastCalls).toHaveLength(0);
   });
 
@@ -1388,7 +1390,7 @@ describe('G 组 · C 区三卡（§3.8.1:954 逐字 + :961 落点；E4b2 件3 �
     expect(buttonByLabel(VERBS.goStudy)).toBeNull();
     expect(texts).toContain(SETTINGS_COPY.dailyGoal.label); // 档案已到手 ⇒ E 区照常（含滑杆）
     expect(slider()).not.toBeNull();
-    expect(buttons()).toHaveLength(7);
+    expect(buttons()).toHaveLength(11); // +4 = 每日目标快捷档（bug_list #6）
     expect(toastCalls).toHaveLength(0);
   });
 
@@ -1440,7 +1442,7 @@ describe('H 组 · B 区账号头（§3.8.1:953：头像 56px 回落 + 昵称 + 
     expect(all('img')).toHaveLength(0);
     expect(visibleTexts()).toContain('tm'.slice(0, 1));
     // 头像面不是按钮：整屏可点数 = 三卡 + 去背单词 + 保存 + F 区三行 + G 区触发钮，B 区 0 贡献
-    expect(buttons()).toHaveLength(9);
+    expect(buttons()).toHaveLength(13); // +4 = 每日目标快捷档（bug_list #6）
     expect(buttons().some((b) => b.querySelector('img'))).toBe(false);
   });
 
@@ -1458,7 +1460,7 @@ describe('H 组 · B 区账号头（§3.8.1:953：头像 56px 回落 + 昵称 + 
     // "img 上屏"这一半（**待证**：真机 WebView 上应出现圆图）。本轮该钉的是"什么都没多出来"：
     const hashBefore = window.location.hash;
     const before = fetchCalls.length;
-    expect(buttons()).toHaveLength(9); // 与缺图态同一颗数：头像没变成第 10 颗可点控件
+    expect(buttons()).toHaveLength(13); // 与缺图态同一颗数（+4 快捷档）：头像没变成额外可点控件
     const texts = visibleTexts();
     expect(texts).toContain('tm');
     expect(texts).toContain(maskPhone(PHONE));

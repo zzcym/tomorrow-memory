@@ -25,7 +25,6 @@
 import * as React from 'react';
 import {
   ARIA,
-  BRAND,
   LOOKUP_COPY,
   SEARCH_PLACEHOLDER,
   STUDY_COPY,
@@ -51,6 +50,7 @@ import {
 } from '@tm/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { lookupKeys, lookupQueryOptions } from '../data/queries/lookup.js';
+import { addWord, wordbookKeys, wordbookQueryOptions } from '../data/queries/wordbook.js';
 import { hasCredential } from '../data/rest-fetcher.js';
 import { takeSearchFocusRequest } from '../native/launch-focus.js';
 import { useSyncStatus } from '../shell/TabBarShell.js';
@@ -221,6 +221,33 @@ export function LookupScreen(): React.JSX.Element {
     setPending(planSubmit(pending.text, pending, next));
   };
 
+  /* bug_list #3：查到词就自动进单词本，不再要求用户先点星标。
+     - 只在「已登录 + 英译中且命中」时做；
+     - 同一会话里同一个词只处理一次（`autoAddedRef`）；
+     - 词本列表已加载（`isSuccess`）时才判断"是否已在词本"，避免重复入队；
+     - 入队失败静默：星标仍显示未收藏，用户可以手动点，不额外弹错。 */
+  const wordbook = useQuery({
+    ...wordbookQueryOptions(),
+    enabled: signedIn,
+    retry: 0,
+  });
+  const autoAddedRef = React.useRef('');
+  React.useEffect(() => {
+    if (!signedIn || !wordbook.isSuccess || view.kind !== 'en') return;
+    const lower = view.word.trim().toLowerCase();
+    if (lower === '' || autoAddedRef.current === lower) return;
+    autoAddedRef.current = lower;
+    for (const entry of wordbook.data ?? []) {
+      if (entry.word.toLowerCase() === lower) return; // 已在词本：不重复入队
+    }
+    try {
+      addWord(view.word);
+      void queryClient.invalidateQueries({ queryKey: wordbookKeys.all });
+    } catch {
+      /* 入队失败不打扰用户 */
+    }
+  }, [signedIn, view.kind, view.word, wordbook.data, wordbook.isSuccess, queryClient]);
+
   const speak = React.useCallback(
     (word: string): void => {
       host.speak(word, 'us');
@@ -256,28 +283,13 @@ export function LookupScreen(): React.JSX.Element {
       data-testid="lookup-screen"
       onClickCapture={preventRawHrefNavigation}
     >
-      {/* B 装饰层 + slogan：查询前后**同一份 DOM**，结果只往下面的独立区块里加（判据①）。 */}
-      <div className="px-4 pb-3 pt-6 text-center" data-testid="lookup-hero">
-        <h1 className="text-h1 font-bold tracking-tight text-ink max-md:text-h1-xs">{BRAND.slogan}</h1>
-      </div>
-
-      {/* I-01（迭代工单）：未输入时搜索框垫到视口上部，聚焦即整段高度收 0 平滑上滑。
-          I-03（迭代工单）：静态位降到视口上三分之一（中心 Y ≈ 33%）—— 固定基线 ≈92px 与视口无关，
-          单一 vh 撑不住两档，故按 Tailwind 断点分 `md` / `max-md` 两颗高度档。
-          手法 = hero 与 dock 之间的可折叠 spacer + CSS `transition-[height]`（时长走既有权衡档
-          `duration-move` = --dur-move，⛔ 魔法毫秒数）。dock 的节点身份与 `sticky top-0` 原样不动
-          （判据③）；`queried !== ''` 参与判定是刻意的：Enter/选条目会关掉面板（`focused=false`），
-          但查询后框不许滑回中间 —— 条件全部由既有状态合成，⛔ 新增状态机。 */}
-      <div
-        aria-hidden="true"
-        className={`w-full shrink-0 transition-[height] duration-move ease-standard ${
-          focused || queried !== '' ? 'h-0' : 'md:h-[27.5vh] max-md:h-[22.2vh]'
-        }`}
-      />
+      {/* bug_list #8：删掉 slogan（"记不住的，交给明天"）。原先 hero 与 spacer 两段是为了把
+          搜索框垫到视口上三分之一，slogan 一撤这两段就只剩空白 ⇒ 一并去掉，搜索框直接落在顶部
+          （外层 `main` 的 `pt-safe-top` 已经留好状态栏呼吸位，bug_list #4 同源）。 */}
 
       {/* 修①：搜索框固定在滚动容器顶部（`sticky top-0`），不再 `top:29%→0` 跳位。 */}
       <div
-        className="sticky top-0 z-sticky bg-bg/95 px-4 pb-2 pt-1 backdrop-blur"
+        className="sticky top-0 z-sticky bg-bg/95 px-4 pb-2 pt-2 backdrop-blur"
         data-testid="lookup-search-dock"
       >
         <div className="relative mx-auto w-full max-w-read">

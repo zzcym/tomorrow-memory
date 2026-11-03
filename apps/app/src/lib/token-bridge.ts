@@ -20,7 +20,7 @@ import {
   TOKEN_KEY,
   bridge,
   clearCredential,
-  kvGet,
+  readIdentity,
   readTempToken,
   readToken,
   writeIdentity,
@@ -68,12 +68,10 @@ export interface StoredIdentity {
   nickname: string;
 }
 
-/** 身份回显位（手机号 / 昵称）：与 token 同生共死的是 `clearCredential()`，见 `clearStoredSession`。 */
+/** 身份回显位（手机号 / 昵称）：与 token 同生共死的是 `clearCredential()`，见 `clearStoredSession`。
+ *  bug_list #1：读侧走 `bridge.readIdentity()`（原生侧也存了一份），localStorage 被清后仍能回显。 */
 export function readStoredIdentity(): StoredIdentity {
-  return {
-    phone: kvGet(PHONE_KEY) ?? '',
-    nickname: kvGet(NICKNAME_KEY) ?? '',
-  };
+  return readIdentity();
 }
 
 export function saveIdentity(phone: string, nickname: string): void {

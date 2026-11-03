@@ -85,21 +85,51 @@ public class MainActivity extends Activity {
             }
         });
         web.addJavascriptInterface(new Bridge(), "AndroidBridge");
-        // 页面就绪后把 SharedPreferences 里的 token 回灌 WebView(localStorage 可能被系统清理)
+        // 页面就绪后把 SharedPreferences 里的 token / 身份 / 版本号回灌 WebView
+        // （bug_list #1：localStorage 可能被系统或升级清掉。早期只回灌 token，于是升级后
+        //  表现为"登录着但手机号昵称为空、若干界面显示异常"；身份必须与 token 同一时机回灌。）
         web.setWebViewClient(new android.webkit.WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
-                String token = getSharedPreferences("tm", MODE_PRIVATE).getString("token", "");
+                SharedPreferences sp = getSharedPreferences("tm", MODE_PRIVATE);
+                String token = sp.getString("token", "");
                 if (!token.isEmpty()) {
                     String quoted = org.json.JSONObject.quote(token);
                     view.evaluateJavascript(
                             "try{if(!localStorage.getItem('tm.token'))localStorage.setItem('tm.token'," + quoted + ");}catch(e){}",
                             null);
                 }
+                String phone = sp.getString("phone", "");
+                String nickname = sp.getString("nickname", "");
+                if (!phone.isEmpty() || !nickname.isEmpty()) {
+                    String p = org.json.JSONObject.quote(phone);
+                    String n = org.json.JSONObject.quote(nickname);
+                    view.evaluateJavascript(
+                            "try{if(localStorage.getItem('tm.token')){"
+                                    + "if(!localStorage.getItem('tm.phone'))localStorage.setItem('tm.phone'," + p + ");"
+                                    + "if(!localStorage.getItem('tm.nickname'))localStorage.setItem('tm.nickname'," + n + ");"
+                                    + "}}catch(e){}",
+                            null);
+                }
+                String version = appVersionName();
+                if (!version.isEmpty()) {
+                    String qv = org.json.JSONObject.quote(version);
+                    view.evaluateJavascript(
+                            "try{localStorage.setItem('tm.appVersion'," + qv + ");}catch(e){}", null);
+                }
             }
         });
         setContentView(web);
         web.loadUrl("file:///android_asset/index.html");
+    }
+
+    /** 当前 APK 的 versionName（bug_list #9：版本号唯一来源是构建时的 AndroidManifest / aapt2 覆盖值）。 */
+    private String appVersionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     @Override
@@ -150,6 +180,33 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String readToken() {
             return getSharedPreferences("tm", MODE_PRIVATE).getString("token", "");
+        }
+
+        /**
+         * 身份双写（bug_list #1）：手机号 / 昵称也进 SharedPreferences。
+         * 只存 token 的话，localStorage 一被清，界面就是"登录着但没有手机号昵称"。
+         * 传空串 = 清除（退出登录 / 401 与 token 一起清）。
+         */
+        @JavascriptInterface
+        public void saveIdentity(String phone, String nickname) {
+            SharedPreferences sp = getSharedPreferences("tm", MODE_PRIVATE);
+            sp.edit()
+                    .putString("phone", phone == null ? "" : phone)
+                    .putString("nickname", nickname == null ? "" : nickname)
+                    .apply();
+        }
+
+        /** 返回 "phone\nnickname"（不含换行的空串表示没有身份）。 */
+        @JavascriptInterface
+        public String readIdentity() {
+            SharedPreferences sp = getSharedPreferences("tm", MODE_PRIVATE);
+            return sp.getString("phone", "") + "\n" + sp.getString("nickname", "");
+        }
+
+        /** 版本号（bug_list #9：版本提示靠它比对，不再回落到 '0.0.0'）。 */
+        @JavascriptInterface
+        public String getAppVersion() {
+            return appVersionName();
         }
 
         /** 小组件深链:取走即清空 */

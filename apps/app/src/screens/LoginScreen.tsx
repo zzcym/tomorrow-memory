@@ -211,7 +211,7 @@ export default function LoginScreen(): React.JSX.Element {
         serverMessage={failure.message === '' ? undefined : failure.message}
         onSmsEntryClick={requestSmsCode}
         defaultPhone={auth.phone}
-        autoFocus="password"
+        autoFocus="phone"
         signInSubtitle={AUTH_COPY.wall.subtitle}
         switchToRegisterLabel={AUTH_COPY.switchToRegister}
         switchToSignInLabel={AUTH_COPY.switchToSignIn}

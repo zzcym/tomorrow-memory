@@ -116,11 +116,25 @@ export const DAILY_GOAL_MAX = 200;
  * 上收前这两组数只有两处私有副本：App `apps/app/src/screens/MeScreen.tsx` 的 `GOAL_SLIDER`
  * 与 Web `apps/web/src/lib/api/profile.ts` 的 `goalMin/goalMax/goalStep`（两侧改 import 归后续轮）。
  */
+/**
+ * 每日目标**滑杆**的取值域。
+ *
+ * 2026-11（bug_list #6）改判：原口径是 UI §3.8.3 的 `min=5 max=50 step=5`，真机上手感是
+ * "只能五个五个地跳、最多 50"，用户明确要求换一种调整方式 ⇒ 改成 `step=1` 的连续滑杆 +
+ * 快捷档位按钮，上限抬到契约域允许的 200（不再人为砍到 50）。
+ * 与契约域的关系仍是 **UI 域 ⊂ 契约域**：`UI_MIN ≥ MIN && UI_MAX ≤ MAX && UI_STEP > 0`，
+ * 不变式钉在 `packages/shared/test/contracts.spec.ts`。
+ */
 export const DAILY_GOAL_UI_MIN = 5;
-export const DAILY_GOAL_UI_MAX = 50;
-export const DAILY_GOAL_UI_STEP = 5;
+export const DAILY_GOAL_UI_MAX = 200;
+export const DAILY_GOAL_UI_STEP = 1;
 /** §3.8.3 同行的"默认 `10`"：与 `DAILY_GOAL_DEFAULT` 必须同值（不变式钉的第三条）。 */
 export const DAILY_GOAL_UI_DEFAULT = 10;
+/**
+ * 快捷档位（bug_list #6 的"换一种方法"）：滑杆负责微调，这四颗负责一键跳到常用值。
+ * 全部落在 `[UI_MIN, UI_MAX]` 内，用例 B-04 会按同一区间校验。
+ */
+export const DAILY_GOAL_UI_PRESETS: readonly number[] = [10, 20, 50, 100];
 /** R-04 / 现网 `routes/profile.ts:34`：昵称长度上限（REST 与 tRPC 同一值）。 */
 export const NICKNAME_MAX_LENGTH = 30;
 

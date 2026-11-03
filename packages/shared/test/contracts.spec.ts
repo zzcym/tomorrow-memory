@@ -1140,10 +1140,10 @@ describe('T-19g-i G-3：§3.8.1 C 区三张统计卡上收为 SETTINGS_COPY.stat
 });
 
 describe('T-19g-i G-1：§3.8.3 滑杆域上收为 limits.ts 的四条数值 + 域不变式', () => {
-  it('四条数值逐字 = §3.8.3:979「参数：`min=5 max=50 step=5`，默认 `10`」', () => {
+  it('四条数值随 bug_list #6 改判：`min=5 max=200 step=1`，默认 `10`（原 §3.8.3 的 5/50/5 已废止）', () => {
     expect(DAILY_GOAL_UI_MIN).toBe(5);
-    expect(DAILY_GOAL_UI_MAX).toBe(50);
-    expect(DAILY_GOAL_UI_STEP).toBe(5);
+    expect(DAILY_GOAL_UI_MAX).toBe(200);
+    expect(DAILY_GOAL_UI_STEP).toBe(1);
     expect(DAILY_GOAL_UI_DEFAULT).toBe(10);
     // 数值、不是文案
     for (const v of [DAILY_GOAL_UI_MIN, DAILY_GOAL_UI_MAX, DAILY_GOAL_UI_STEP, DAILY_GOAL_UI_DEFAULT]) {
@@ -1161,7 +1161,8 @@ describe('T-19g-i G-1：§3.8.3 滑杆域上收为 limits.ts 的四条数值 + �
     // 域内每一个可滑落点（含两端）都能过 `daily_goal` 的契约校验 —— 真哨，不只看数
     const stops: number[] = [];
     for (let n = DAILY_GOAL_UI_MIN; n <= DAILY_GOAL_UI_MAX; n += DAILY_GOAL_UI_STEP) stops.push(n);
-    expect(stops.length).toBe(10);
+    // bug_list #6 起 step=1：5..200 全整数，共 196 个可滑点（原 5/50/5 是 10 个）
+    expect(stops.length).toBe(DAILY_GOAL_UI_MAX - DAILY_GOAL_UI_MIN + 1);
     expect(stops[stops.length - 1]).toBe(DAILY_GOAL_UI_MAX);
     for (const n of stops) {
       expect(ProfileUpdateInputSchema.safeParse({ daily_goal: n }).success, `${n} 被契约域拒`).toBe(true);

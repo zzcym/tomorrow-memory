@@ -32,12 +32,16 @@ import {
   shouldRunSyncChain,
   type StartupStepName,
 } from './data/startup.js';
-import { bindNavigation, onAuthSignal } from './data/rest-fetcher.js';
+import { bindNavigation, hasCredential, onAuthSignal } from './data/rest-fetcher.js';
 import {
   LOGIN_ROUTE,
   UPGRADE_PASSWORD_ROUTE,
   attachAuthSignals,
+  refreshFromStorage,
 } from './lib/auth-store.js';
+import { profileQueryOptions } from './data/queries/profile.js';
+import { readStoredIdentity } from './lib/token-bridge.js';
+import { writeIdentity } from './native/bridge.js';
 import { consumeLaunchFocus, requestSearchFocus, targetToPath } from './native/launch-focus.js';
 import './styles/app.css';
 
@@ -145,6 +149,28 @@ function bindDataLayerNavigation(): void {
   attachAuthSignals();
 }
 
+/**
+ * bug_list #1 的第二道保险：**token 在、身份为空**（更新前的老版本只回灌/只写过 token）
+ * ⇒ 用一次 `/api/profile` 把手机号与昵称补回来，界面不再"登录着但没有名字/资料页空白"。
+ *
+ * 边界：
+ *  - 401 不在这里判 —— 单点在 `rest-fetcher.handleAuthError()`；
+ *  - 网络失败静默，回前台时启动链会再跑，下次自然补上；
+ *  - 只补空位（`phone || id.phone`），不覆盖用户改过的昵称。
+ */
+export async function healIdentity(): Promise<void> {
+  if (!hasCredential()) return;
+  const id = readStoredIdentity();
+  if (id.phone !== '' && id.nickname !== '') return;
+  try {
+    const profile = await queryClient.fetchQuery(profileQueryOptions());
+    writeIdentity(profile.phone || id.phone, profile.nickname || id.nickname);
+    refreshFromStorage();
+  } catch {
+    /* 网络 / 401：交给既有单点，这里静默 */
+  }
+}
+
 /** 小组件 / 通知直达（R-20 ③、R-21 ④⑥）：目标由 Java 写入，取一次即清。 */
 export function applyLaunchFocus(): void {
   const target = consumeLaunchFocus();
@@ -166,6 +192,7 @@ export function bootstrap(rootEl?: Element | null): void {
       if (document.visibilityState !== 'hidden') onForeground();
     });
     void runStartupChain('cold');
+    void healIdentity();
   }
   const node =
     rootEl ?? (typeof document === 'undefined' ? null : document.getElementById('app'));

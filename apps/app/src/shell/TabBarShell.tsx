@@ -110,8 +110,20 @@ export function VersionBanner(): React.JSX.Element | null {
 
 /* ═════════════════ 标签栏 ═════════════════ */
 
-function ariaLabelFor(index: number, due: number): string {
-  const item = NAV_ITEMS[index] as (typeof NAV_ITEMS)[number];
+/**
+ * App 底部 tab 的**显示顺序**（bug_list #5：查词挪到正中间）。
+ *
+ * 与 `NAV_ITEMS`（共享给 Web 顶栏）解耦：那条顺序是两端同源的导航定义，Web 侧仍是
+ * 查词在第一个；App 只是按这张表重排渲染，不改 shared 的常量，也不动任何 href/hash。
+ * 五格里查词落在第三格 = 屏幕正中间。
+ */
+const APP_TAB_ORDER = ['#/study', '#/wordbook', '#/', '#/progress', '#/me'] as const;
+
+const APP_TABS = APP_TAB_ORDER.map((hash) => NAV_ITEMS.find((item) => item.hash === hash)).filter(
+  (item): item is (typeof NAV_ITEMS)[number] => item !== undefined,
+);
+
+function ariaLabelFor(item: (typeof NAV_ITEMS)[number], due: number): string {
   // 背单词 tab（`#/study`）的读屏标签带待背数（§6.8 定稿），其余 tab 用标签本身。
   return item.hash === '#/study' ? ARIA.studyTab(due) : item.tab;
 }
@@ -126,16 +138,16 @@ export function TabBar(): React.JSX.Element {
       className="fixed inset-x-0 bottom-0 z-dock flex border-t border-hair bg-surface pb-[env(safe-area-inset-bottom)]"
       data-testid="tab-bar"
     >
-      {NAV_ITEMS.map((item, index) => {
+      {APP_TABS.map((item) => {
         const path = item.hash.replace(/^#/, '');
         const active = loc.path === path;
-        const showDot = index === 1 && due > 0;
+        const showDot = item.hash === '#/study' && due > 0;
         return (
           <button
             key={item.hash}
             type="button"
             aria-current={active ? 'page' : undefined}
-            aria-label={ariaLabelFor(index, due)}
+            aria-label={ariaLabelFor(item, due)}
             data-tab={path}
             data-active={active ? '1' : '0'}
             className="relative flex min-h-tap flex-1 flex-col items-center justify-center gap-0.5 text-2xs text-ink-muted"
@@ -153,7 +165,7 @@ export function TabBar(): React.JSX.Element {
                 {formatCount(due)}
               </span>
             ) : null}
-            {index === 2 && pending > 0 ? (
+            {item.hash === '#/wordbook' && pending > 0 ? (
               <span
                 className="absolute right-3 top-1 h-1.5 w-1.5 rounded-full bg-warning"
                 data-testid="pending-dot"
@@ -170,13 +182,13 @@ export function TabBar(): React.JSX.Element {
 
 /**
  * tab 页的布局壳：更新横幅（顶部一次性）+ 内容 + 底部标签栏。
- * 内容区自带 `pb-safe-bottom`，避免被固定标签栏压住（§2.4）。
+ * 内容区自带 `pb-safe-bottom` / `pt-safe-top`（bug_list #4：顶部状态栏留白），避免被固定标签栏压住。
  */
 export function TabBarShell({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-ink" data-testid="tab-shell">
       <VersionBanner />
-      <main id="main" className="flex-1 pb-safe-bottom">
+      <main id="main" className="flex-1 pb-safe-bottom pt-safe-top">
         {children}
       </main>
       <TabBar />
