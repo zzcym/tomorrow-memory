@@ -1,0 +1,7 @@
+{
+  "name": "tm-fixtures-clean",
+  "private": true,
+  "scripts": {
+    "depcruise": "depcruise . --config .dependency-cruiser.cjs"
+  }
+}

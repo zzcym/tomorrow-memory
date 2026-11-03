@@ -6,6 +6,7 @@
  */
 
 import type {
+  AnalysisPeriod,
   AnalyticsDataset,
   CefrLevel,
   FsrsCardRow,
@@ -14,7 +15,11 @@ import type {
 } from '@tm/shared';
 import type { LookupResponse } from './types.js';
 
-export type AnalysisPeriod = '7d' | '30d' | '90d' | 'all';
+/**
+ * 分析周期。**唯一声明点** = `@tm/shared` 的 `types.ts:204`（两侧值域逐字相同 ⇒ 零语义漂移）。
+ * 本模块只转发，`index.ts` 的再导出面一字不动，消费点无感。
+ */
+export type { AnalysisPeriod };
 
 /** 学情分析端口（server 的 AnalystService 实现；ClickHouse 优先，DB 降级） */
 export interface AnalystPort {

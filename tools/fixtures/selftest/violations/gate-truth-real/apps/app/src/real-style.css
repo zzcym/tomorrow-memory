@@ -1,0 +1,15 @@
+/*
+ * A-101 (b) 夹具（红向）：两条**声明形状**的 `!important`，都不在 prefers-reduced-motion 块里、
+ * 也没有 a11y-exception 注释 ⇒ `css-important-budget` 必须红（预算 1，这里 2 处）。
+ *
+ * 形状特意写成最常见的越界样：直接给工具类提权限。这条红不许被"只数样式面"的新口径洗掉 ——
+ * 新口径去掉的是"拿禁字当探针"的测试面写法，不是真提权。
+ */
+
+.badge-force {
+  color: #ffffff !important;
+}
+
+.card-hide {
+  display: none !important;
+}

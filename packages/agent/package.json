@@ -12,6 +12,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --root ../.. --project @tm/agent",
     "build-index": "tsx src/scripts/build-vector-index.ts",
     "test-query": "tsx src/scripts/test-lookup.ts"
   },

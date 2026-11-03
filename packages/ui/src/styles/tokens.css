@@ -1,0 +1,100 @@
+/**
+ * 设计 token 唯一真源（UI §1.12.1 / 架构 §3.4）。
+ * 宿主（apps/web/src/app/globals.css、apps/app/src/styles/app.css）只允许 @import 本文件
+ * + UI §1.12.3 白名单内的 ≤10 行覆写，不得再定义任何颜色。
+ * 全部颜色以 HSL 三元组存储，Tailwind 侧写 hsl(var(--x))（UI §1 抬头 / 架构 §3.4）。
+ */
+
+:root {
+  color-scheme: light;
+  /* 语义色（浅色套 = UI §1.1） */
+  --bg: 150 12% 97%;      --surface: 0 0% 100%;   --surface-sunken: 150 13% 94%;
+  --brand-soft: 165 32% 93%;
+  --ink: 162 25% 10%;     --ink-muted: 161 8% 39%; --hair: 154 11% 88%;
+  --brand: 170 75% 24%;  --brand-strong: 170 76% 16%; --on-brand: 0 0% 100%;
+  --focus: 170 75% 24%;
+  --success: 150 72% 29%; --warning: 35 100% 27%;  --danger: 3 71% 41%;
+  --success-soft: 145 40% 94%; --success-soft-strong: 147 43% 96%;
+  --warning-soft: 36 80% 92%;  --danger-soft: 6 71% 95%;
+  /* 图表 / 热力图（UI §1.2.1，浅色套） */
+  --chart-1: 170 75% 24%; --chart-2: 169 50% 37%; --chart-3: 167 37% 63%;
+  --chart-4: 161 8% 39%;  --chart-5: 35 100% 27%; --chart-danger: 3 71% 41%;
+  --chart-grid: 154 11% 88%; --chart-axis: 161 8% 39%;
+  --heat-1: 162 20% 80%; --heat-2: 167 37% 63%; --heat-3: 169 50% 37%; --heat-4: 170 76% 16%;
+  /* L0 未打卡 = transparent + 1px dashed --hair（形状通道，见 UI §1.2.1 硬规则）；未来日 = transparent 无描边 */
+  --heat-empty: transparent;
+  --heat-future: transparent;
+  /* 装饰层（低饱和品牌渐变，两端同一份） */
+  --decor-a: 160 36% 95%;  --decor-b: 163 36% 88%;  --decor-c: 169 36% 48%;
+  /* 品牌 ramp（UI §1.2；仅供渐变/阴影/图表使用，组件不得直接引用级别变量） */
+  --brand-50: 160 36% 95%;  --brand-100: 163 36% 88%; --brand-200: 165 38% 77%;
+  --brand-300: 167 37% 63%; --brand-400: 169 36% 48%; --brand-500: 170 75% 24%;
+  --brand-600: 170 76% 20%; --brand-700: 170 76% 16%; --brand-800: 170 75% 12%;
+  --brand-900: 168 74% 9%;  --brand-950: 161 76% 5%;
+  /* 尺度层（UI §1.7/§1.8/§1.9/§1.11；两端禁止覆写） */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
+  --sp-8:32px; --sp-10:40px; --sp-12:48px; --sp-16:64px;
+  --r-xs:6px; --r-sm:8px; --r-md:10px; --r-lg:14px; --r-xl:18px; --r-full:999px;
+  --elev-1: 0 1px 2px hsl(162 25% 10% / .04), 0 1px 3px hsl(162 25% 10% / .06);
+  --elev-2: 0 8px 24px hsl(162 25% 10% / .10);
+  --elev-brand: 0 4px 18px hsl(170 75% 24% / .10);
+  --tap: 44px; --search-h: 50px; --tab-h: 56px; --topbar-h: 56px; --field-h: 48px;
+  --dialog-max-h: 92vh;            /* 兜底：Chrome 84 不认 dvh（UI §3.11.2） */
+  --dur-tap:90ms; --dur-micro:120ms; --dur-enter:180ms; --dur-exit:140ms;
+  --dur-move:240ms; --dur-sheet:280ms; --dur-breath:24s;
+  --dur-spin:900ms; --dur-skeleton:1400ms;              /* 见 UI §1.11 表 */
+  --dur-fast: var(--dur-micro); --dur-base: var(--dur-move); --dur-instant: var(--dur-tap);
+  --ease-standard: cubic-bezier(.2,.8,.3,1);
+  --ease-decelerate: cubic-bezier(.4,0,.2,1);
+  --ease-accelerate: cubic-bezier(.4,0,1,1);
+  --font-sans: "PingFang SC","HarmonyOS Sans SC","MiSans","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-latin: "SF Pro Text",-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,var(--font-sans);
+  --font-mono: ui-monospace,"SF Mono",Menlo,Consolas,"Cascadia Mono",monospace;
+  /* 内容最大宽度（UI §2.2；`--max-w-page` 在 UI §1.12.3 的宿主覆写白名单内） */
+  --max-w-auth: 420px; --max-w-read: 680px; --max-w-list: 900px; --max-wide: 1120px;
+  --max-w-page: 1120px;
+}
+
+/* 常青内核走真实视口高；与替换前 `max-h-dvh` 逐字同值（Web 计算值不变的那一半）。 */
+@supports (height: 100dvh) {
+  :root { --dialog-max-h: 100dvh; }
+}
+
+/* 深色套（UI §1.3 / §1.12.1）：变量名与浅色完全一致，组件不感知主题（UI §5.1） */
+.dark {
+  color-scheme: dark;
+  --bg: 165 25% 6%;       --surface: 167 19% 9%;  --surface-sunken: 162 16% 13%;
+  --brand-soft: 168 42% 14%;
+  --ink: 155 20% 88%;     --ink-muted: 160 8% 63%; --hair: 160 13% 18%;
+  --brand: 167 47% 55%;  --brand-strong: 157 57% 68%; --on-brand: 166 71% 8%;
+  --focus: 157 57% 68%;
+  --success: 152 43% 63%; --warning: 34 68% 69%;  --danger: 0 73% 78%;
+  --success-soft: 166 37% 14%; --success-soft-strong: 166 37% 14%;
+  --warning-soft: 33 34% 14%;  --danger-soft: 6 34% 13%;
+  /* 图表 / 热力图（UI §1.2.1，深色套；与 §1.3 同名的直接复用值） */
+  --chart-1: 167 47% 55%; --chart-2: 166 40% 68%; --chart-3: 168 33% 38%;
+  --chart-4: 160 8% 63%;  /* = --ink-muted */
+  --chart-5: 34 68% 69%;  /* = --warning */ --chart-danger: 0 73% 78%; /* = --danger */
+  --chart-grid: 160 13% 18%; /* = --hair */ --chart-axis: 160 8% 63%; /* = --ink-muted */
+  --heat-1: 165 18% 20%; --heat-2: 166 19% 30%; --heat-3: 167 47% 55%; --heat-4: 160 48% 83%;
+  --decor-a: 166 37% 10%; --decor-b: 168 42% 14%; --decor-c: 167 47% 55%;
+  --elev-1: none;
+  --elev-2: 0 8px 24px hsl(165 25% 2% / .55);
+  --elev-brand: 0 4px 18px hsl(167 47% 55% / .16);
+}
+
+/* a11y-exception: R-22 ④ —— 全站唯一一条提权声明（UI §8.2-5 预算 =1，T-02 门禁 css-important-budget）。
+   装饰层呼吸必须在 reduced-motion 下"完全停止"，而 Tailwind 工具类在 utilities 层、
+   源码顺序晚于本文件，不提权无法压过 `animate-breath`，故此处必须越过层叠顺序。 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-tap:1ms; --dur-micro:1ms; --dur-enter:1ms; --dur-exit:1ms;
+    --dur-move:1ms; --dur-sheet:1ms; --dur-breath:0s;
+    --dur-spin:0s; --dur-skeleton:0s;
+  }   /* 别名 --dur-fast/base/instant 经 var() 自动跟随，无需再写一遍（UI §1.11） */
+  .decor-breath, .animate-breath { animation-name: none !important; }
+}
+
+/* UI §1.12.2 的 `tnum` 数字对齐类。preset 不用插件（架构 §3.2），而 Tailwind 内建类名是
+   `tabular-nums`，规范名与内建名不同 → 在变量层给出这一条别名，两端同一份。 */
+.tnum { font-variant-numeric: tabular-nums; }

@@ -4,33 +4,51 @@
  * 单词详情（ISR 预渲染页的客户端部分）
  * - 静态释义（tRPC lookupStatic）
  * - 加入单词本
+ *
+ * ⚠ **T-12 未退役本文件的原因**（A-29 第 2 条的"保留 + 移交"路径，已登记进
+ * `04-dev-report-T-12.md`）：`page.tsx` 是服务端组件（`generateStaticParams` 200 词 + `revalidate`），
+ * 取数与收藏动作必须在客户端边界里，而 `@tm/ui/patterns` 按 §3.5 `ui-no-io` 是**零网络 props 驱动**，
+ * 无法承接 `trpc.dictionary.lookupStatic.useQuery` + `wordbook.add.useMutation` 这一层。
+ * T-15 在本页做整页重写时按下面两块缺口换成 `WordDetailCard`：
+ * ① `WordDetailCard` 无 `translation`（顶层一行中译释义）槽位，且其 `isEmpty` 判定不看 `translation`
+ *    → `groups` 为空、只有 `translation` 的词会误落空态（`contracts/lookup.ts:54` `translation` 是必填串）；
+ * ② 频率徽章「柯林斯 N」在 `@tm/shared` 无常量（`WORD_DETAIL_SECTION_LABELS` 未收录）。
+ * 本文件已去掉全部组件体内中文字面量（A-8/A-23）并改走 `useHost().toast/speak`（§3.11.1）。
  */
 
 import * as React from 'react';
 import { BookmarkPlus, Volume2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { ARIA, LOOKUP_COPY, VERBS } from '@tm/shared';
 import { trpc } from '@/lib/trpc';
 import { useAuthed } from '@/lib/use-auth';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@tm/ui';
+import { Badge } from '@tm/ui';
+import { Card, CardContent } from '@tm/ui';
+import { Skeleton } from '@tm/ui';
+import { useHost } from '@tm/ui';
+
+/* ── 宿主注入串（A-8/A-23：组件体内零中文字面量；缺失常量已登记进 T-12 报告的 shared 需求清单） ── */
+/** `@tm/shared` 缺"该词已在词本里"的人话常量（`WORDBOOK_COPY` 只有移出侧）。 */
+const TM_ALREADY_ADDED = '该单词已在单词本中';
+/** §6.4 词详情页频率徽章前缀：shared `WORD_DETAIL_SECTION_LABELS` 未收录柯林斯档位。 */
+const collinsBadge = (freq: number): string => `柯林斯 ${freq}`;
 
 export function WordLookup({ word }: { word: string }): React.JSX.Element {
   const authed = useAuthed();
+  const host = useHost();
   const utils = trpc.useUtils();
   const lookup = trpc.dictionary.lookupStatic.useQuery({ word, direction: 'en2zh' });
   const addWord = trpc.wordbook.add.useMutation({
     onSuccess: (data) => {
       if (data.added) {
-        toast.success(`已加入单词本：${word}`);
+        host.toast(`${LOOKUP_COPY.favoriteToast.body}：${word}`, 'success');
       } else {
-        toast.info('该单词已在单词本中');
+        host.toast(TM_ALREADY_ADDED, 'info');
       }
       void utils.wordbook.list.invalidate();
       void utils.review.today.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: () => host.toast(LOOKUP_COPY.networkFail, 'error'),
   });
 
   const result = lookup.data;
@@ -49,7 +67,9 @@ export function WordLookup({ word }: { word: string }): React.JSX.Element {
               <Skeleton className="h-4 w-1/2" />
             </div>
           ) : result === null ? (
-            <p className="text-muted-foreground">未找到该词条，请稍后重试或回到首页搜索。</p>
+            <p className="text-muted-foreground">
+              {LOOKUP_COPY.notFound.title} · {LOOKUP_COPY.notFound.subtitle}
+            </p>
           ) : zhResult ? (
             <div>
               <h2 className="text-2xl font-bold">{zhResult.query}</h2>
@@ -66,21 +86,13 @@ export function WordLookup({ word }: { word: string }): React.JSX.Element {
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="发音"
-                  onClick={() => {
-                    try {
-                      const u = new SpeechSynthesisUtterance(enResult.word);
-                      u.lang = 'en-US';
-                      window.speechSynthesis.speak(u);
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
+                  aria-label={ARIA.speak(enResult.word)}
+                  onClick={() => host.speak(enResult.word, 'us')}
                 >
                   <Volume2 className="h-5 w-5" />
                 </Button>
                 {enResult.phonetic && <span className="text-muted-foreground">/ {enResult.phonetic} /</span>}
-                {'freq' in enResult && enResult.freq > 0 && <Badge variant="outline">柯林斯 {enResult.freq}</Badge>}
+                {'freq' in enResult && enResult.freq > 0 && <Badge variant="outline">{collinsBadge(enResult.freq)}</Badge>}
               </div>
               {enResult.translation && <p className="text-lg text-muted-foreground">{enResult.translation}</p>}
               <div className="space-y-1.5">
@@ -104,7 +116,7 @@ export function WordLookup({ word }: { word: string }): React.JSX.Element {
               {authed && (
                 <Button size="sm" onClick={() => addWord.mutate({ word: enResult.word })}>
                   <BookmarkPlus className="mr-1 h-4 w-4" />
-                  加入单词本
+                  {VERBS.addToOneWordbook}
                 </Button>
               )}
             </div>

@@ -1,0 +1,48 @@
+{
+  "name": "@tm/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles/*": "./src/styles/*",
+    "./tailwind-preset": "./src/tailwind-preset.ts",
+    "./patterns/*": "./src/patterns/*",
+    "./auth/*": "./src/auth/*",
+    "./hooks/*": "./src/hooks/*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "//test": "A-18-2：测试装配点唯一在根 vitest.workspace.ts（T-01 S14，包内不建 vitest.config.ts）。vitest 3 读不到子目录里的装配文件，所以必须用 `--root ../..` 把 vitest 的 root 切到仓库根；项目根（vitest 发现用例用的目录）由 vitest.workspace.ts 里的**绝对路径**钉死，于是 cwd 不再影响用例发现。",
+    "test": "vitest run --root ../.. --project @tm/ui"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "dependencies": {
+    "@radix-ui/react-avatar": "^1.1.1",
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-progress": "^1.1.0",
+    "@radix-ui/react-scroll-area": "^1.2.0",
+    "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-switch": "^1.1.1",
+    "@radix-ui/react-tabs": "^1.1.1",
+    "@tm/shared": "workspace:*",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^3.4.14"
+  }
+}

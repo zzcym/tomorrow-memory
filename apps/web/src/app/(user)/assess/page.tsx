@@ -11,12 +11,13 @@ import * as React from 'react';
 import { Check, Clock, Lightbulb, Volume2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import { useAuthed } from '@/lib/use-auth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { tmCodeOf } from '@/lib/api/auth';
+import { AuthGate } from '@/components/auth-gate';
+import { Button } from '@tm/ui';
+import { Input } from '@tm/ui';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@tm/ui';
+import { Badge } from '@tm/ui';
+import { Progress } from '@tm/ui';
 
 interface GeneratedQuestion {
   key: string;
@@ -53,7 +54,15 @@ interface AssessmentState {
   startTime: number;
 }
 
+/**
+ * T-28 / R-23②：主体套 `<AuthGate>`（游客 = 默认 `<LoginWall>`，idle = 骨架）。
+ * 原 `if (!authed) return <p>…</p>` 的"请先登录"句式与其唯一依赖 `useAuthed()` 随接线删除。
+ */
 export default function AssessPage(): React.JSX.Element {
+  return <AuthGate><AssessInner /></AuthGate>;
+}
+
+function AssessInner(): React.JSX.Element {
   const [state, setState] = React.useState<AssessmentState>({
     phase: 'idle',
     questions: [],
@@ -68,7 +77,6 @@ export default function AssessPage(): React.JSX.Element {
   const [submitting, setSubmitting] = React.useState(false);
   const [lastResult, setLastResult] = React.useState<SubmitResult | null>(null);
 
-  const authed = useAuthed();
   const utils = trpc.useUtils();
   const generate = trpc.assessment.generate.useMutation({
     onMutate: () => {
@@ -102,8 +110,14 @@ export default function AssessPage(): React.JSX.Element {
       void utils.review.today.invalidate();
     },
     onError: (err) => {
-      toast.error(err.message);
       setSubmitting(false);
+      // T-25 判据⑦（R-41①）：题面被他人挤占 / 改造前无主题被拒读 ⇒ 服务端 403 `FORBIDDEN`
+      // ⇒ 回到"重新出题"这一条分支（不新增任何文案：`generate` 成功后照常出题，失败才走上面的 toast）。
+      if (tmCodeOf(err) === 'FORBIDDEN') {
+        generate.mutate({ count: state.questions.length || 5 });
+        return;
+      }
+      toast.error(err.message);
     },
   });
 
@@ -158,10 +172,6 @@ export default function AssessPage(): React.JSX.Element {
       /* ignore */
     }
   };
-
-  if (!authed) {
-    return <p className="py-20 text-center text-muted-foreground">请先登录后开始测评。</p>;
-  }
 
   // ===== 结束页 =====
   if (state.phase === 'finished') {

@@ -948,7 +948,7 @@ function renderPassword() {
   body.innerHTML = `
     <div class="card">
       <p class="hint">设置后可用手机号+密码登录,无需验证码</p>
-      <div class="field"><label>新密码(至少 4 位)</label>
+      <div class="field"><label>新密码(至少 8 位)</label>
         <input id="pwdNew" type="password" placeholder="新密码"/></div>
       <div class="field"><label>确认新密码</label>
         <input id="pwdConfirm" type="password" placeholder="再输一次"/></div>
@@ -959,7 +959,9 @@ function renderPassword() {
     const p1 = $('pwdNew').value, p2 = $('pwdConfirm').value;
     const err = $('pwdErr');
     const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
-    if (p1.length < 4) return fail('密码至少 4 位');
+    // I-09①：门槛与话术与 `packages/shared` 的 `PASSWORD_MIN`(=8) 同值 —— 旧包是独立 WebView bundle、
+    // 无 import 通道，只能把值抄在这里；改任何一端都要对另一眼。
+    if (p1.length < 8) return fail('密码至少 8 位');
     if (p1 !== p2) return fail('两次输入的密码不一致');
     const btn = $('pwdSaveBtn');
     btn.disabled = true; btn.textContent = '保存中…';

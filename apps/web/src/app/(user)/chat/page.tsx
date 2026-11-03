@@ -13,10 +13,11 @@ import { Bot, Send, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { getToken } from '@/lib/auth';
 import { useAuthed } from '@/lib/use-auth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { AuthGate } from '@/components/auth-gate';
+import { Button } from '@tm/ui';
+import { Input } from '@tm/ui';
+import { Badge } from '@tm/ui';
+import { Separator } from '@tm/ui';
 import { Markdown } from '@/components/markdown';
 
 interface ChatMessage {
@@ -42,7 +43,16 @@ function getThreadId(): string {
   }
 }
 
+/**
+ * T-28 / R-23②：主体套 `<AuthGate>`（游客 = 默认 `<LoginWall>`，idle = 骨架）。
+ * 原 `if (!authed) return <p>…</p>` 的"请先登录"句式随接线删除；WS 效应里的
+ * `if (!authed) return` 保留（token 消失时断连重挂的防线，不是中间态文案）。
+ */
 export default function ChatPage(): React.JSX.Element {
+  return <AuthGate><ChatInner /></AuthGate>;
+}
+
+function ChatInner(): React.JSX.Element {
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [input, setInput] = React.useState('');
   const [connected, setConnected] = React.useState(false);
@@ -159,10 +169,6 @@ export default function ChatPage(): React.JSX.Element {
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
-
-  if (!authed) {
-    return <p className="py-20 text-center text-muted-foreground">请先登录后开始对话。</p>;
-  }
 
   return (
     <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-3xl flex-col">

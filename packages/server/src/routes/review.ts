@@ -1,70 +1,107 @@
 /**
- * 复习 API：FSRS 复习队列与评分更新
+ * 复习 API（REST 门面，§4.2 收敛规则 1：本文件只做"路径声明 + 入参取数 + 转调 service + 响应组装"）。
  *
- * - GET  /api/review/today       今日复习队列（R < 0.9 按 R 升序）
- * - POST /api/review             提交测评评分 → FSRS 更新
- *   body: { word, rating: 1|2|3|4 }
+ * - GET  /api/review/today  今日复习队列 —— **响应形状与旧版逐键不变**（旧 APK 契约，判据⑧）
+ * - POST /api/review        提交四档评分 → 唯一实现 `services/review-service.ts`
+ *   body: `{ word, rating: 1|2|3|4, mode?: 'review'|'new'|'selfTest' }`
+ * - POST /api/review/undo   撤销上一张（R-11）
+ * - GET  /api/review/queue  三模式取队（R-12，`?mode=&limit=`）
+ *
+ * 旧版这里跑的是 `runAgent()` 的 LLM 编排（审计 S2 的另一半）→ 现在与 tRPC 同源同函数。
+ * CL-3（A-28-6 → A-33-7）：第 2 个入参从"接而不用的 `_agentDeps` / `_llmRouter`"改成
+ * `deps: { events }` —— 复习域对 agent 的形参依赖彻底断开（`review-no-agent` 的静态面与
+ * `test/review-no-llm.spec.ts` 的运行时面都不再多一处"挂着不用的代理"），
+ * 同时补上 L-5 的缺口：REST 门面的评分此前**不落学情事件**，Phase 5 学情统计会漏掉 REST 流量。
  */
 
 import { Hono } from 'hono';
-import type { AgentDeps, LlmRouter } from '@tm/agent';
-import { buildTodayQueue, cardToJson, createDefaultCard, runAgent } from '@tm/agent';
+import type { ReviewQueueResultDto } from '@tm/shared';
 import type { AppDB } from '../db/types.js';
 import { auth, type AuthEnv } from '../middleware/auth.js';
+import { buildQueue, todayQueue } from '../services/queue-service.js';
+import {
+  ReviewError,
+  normalizeMode,
+  rateCard,
+  reviewErrorBody,
+  undoRating,
+  type RateContext,
+} from '../services/review-service.js';
 
-export function createReviewRouter(db: AppDB, deps: AgentDeps, router: LlmRouter): Hono<AuthEnv> {
+function limitOf(raw: string | undefined): number | undefined {
+  const n = raw === undefined ? Number.NaN : Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+/** 服务层错误 → `{ error, code }`（§4.6 统一响应体）；非领域错误照旧冒泡给 Hono。 */
+function failureOf(err: unknown): { body: { error: string; code: string }; status: number } | null {
+  return err instanceof ReviewError ? reviewErrorBody(err) : null;
+}
+
+export function createReviewRouter(
+  db: AppDB,
+  deps: { events?: RateContext['events'] },
+): Hono<AuthEnv> {
   const r = new Hono<AuthEnv>();
 
   r.get('/api/review/today', auth, async (c) => {
-    const userId = c.get('userId');
-    const wordbook = await db.wordbooks.getData(userId);
-    const cards = await db.fsrs.getCardsByUser(userId);
-    // 与单词本双向对齐:
-    // 1) 单词本里的新词(尚无 FSRS 卡)→ 建默认 New 卡,立即进入队列,背单词范围与单词本一致
-    const haveCard = new Set(cards.map((x) => x.word));
-    const now = Date.now();
-    const fresh: Array<{ word: string; cardJson: string }> = [];
-    for (const w of wordbook) {
-      if (haveCard.has(w.word)) continue;
-      const json = cardToJson(createDefaultCard(new Date(now)));
-      await db.fsrs.upsertCard(userId, w.word, json, null, now);
-      fresh.push({ word: w.word, cardJson: json });
-    }
-    const queue = buildTodayQueue([
-      ...cards.map((x) => ({ word: x.word, cardJson: x.fsrs_data })),
-      ...fresh,
-    ]);
-    // 2) 队列中的历史词若不在单词本(跨端来源),自动补入
-    const have = new Set(wordbook.map((w) => w.word));
-    const missing = queue.filter((q) => !have.has(q.word));
-    if (missing.length) {
-      for (const m of missing) wordbook.push({ word: m.word, addedAt: Date.now() });
-      await db.wordbooks.saveData(userId, wordbook, Date.now());
-    }
+    const today = await todayQueue(db, c.get('userId'));
     return c.json({
-      total: cards.length,
-      dueToday: queue.length,
-      queue: queue.map((q) => ({ word: q.word, retrievability: q.retrievability, elapsedDays: q.elapsedDays })),
+      total: today.total,
+      dueToday: today.dueToday,
+      queue: today.queue.map((q) => ({
+        word: q.word,
+        retrievability: q.retrievability,
+        elapsedDays: q.elapsedDays,
+      })),
     });
   });
 
   r.post('/api/review', auth, async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { word?: unknown; rating?: unknown };
-    const word = typeof body.word === 'string' ? body.word.trim().toLowerCase() : '';
-    const rating = typeof body.rating === 'number' ? body.rating : Number(body.rating);
-    if (!word) return c.json({ error: '请输入单词' }, 400);
-    if (![1, 2, 3, 4].includes(rating)) {
-      return c.json({ error: '评分必须为 1-4（1=忘记 2=困难 3=良好 4=轻松）' }, 400);
+    const body = (await c.req.json().catch(() => ({}))) as { word?: unknown; rating?: unknown; mode?: unknown };
+    try {
+      const outcome = await rateCard(
+        db,
+        {
+          userId: c.get('userId'),
+          word: body.word,
+          rating: body.rating,
+          mode: normalizeMode(body.mode),
+        },
+        { events: deps.events },
+      );
+      return c.json(outcome);
+    } catch (err) {
+      const f = failureOf(err);
+      if (f) return c.json(f.body, f.status as 400);
+      throw err;
     }
+  });
 
-    const state = await runAgent(deps, router, {
-      userId: c.get('userId'),
-      input: `测评 ${word} ${rating} 分`,
-      word,
-      rating: rating as 1 | 2 | 3 | 4,
-    });
+  r.post('/api/review/undo', auth, async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { word?: unknown };
+    try {
+      return c.json(await undoRating(db, c.get('userId'), body.word));
+    } catch (err) {
+      const f = failureOf(err);
+      if (f) return c.json(f.body, f.status as 400);
+      throw err;
+    }
+  });
 
-    return c.json({ ok: !state.error, response: state.response ?? '', error: state.error });
+  r.get('/api/review/queue', auth, async (c) => {
+    try {
+      const mode = normalizeMode(c.req.query('mode'));
+      const queue: ReviewQueueResultDto = await buildQueue(db, c.get('userId'), {
+        mode,
+        limit: limitOf(c.req.query('limit')),
+      });
+      return c.json(queue);
+    } catch (err) {
+      const f = failureOf(err);
+      if (f) return c.json(f.body, f.status as 400);
+      throw err;
+    }
   });
 
   return r;

@@ -1,0 +1,150 @@
+{
+  "$comment": "T-02 产出的两类东西：(1) 与 DDL 无耦合的**行为 fixtures**（B/C 段用，双驱动测试共用固定数据集，§6.2 第 4/5 步与 §2 目录树对 tools/fixtures 的定位）；(2) **对账引擎自测样本**（A 段漂移样本，证明 diffTable 不是永真断言）。注意：表结构的单一描述源归 T-06 的 packages/shared/src/schema/tables.ts，本文件里的 descriptor 只是格式约定与自测夹具，不得当第二份真相使用（--self-test 会校验形状一致性，T-06 交付后 pnpm ddl-parity 读的是 tables.ts）。",
+  "informative_for": "T-06",
+  "descriptor_shape": {
+    "$comment": "T-06 的 tables.ts 需导出的形状（列名/类型/可空/默认值/索引的单一描述源）",
+    "example": [
+      {
+        "name": "users",
+        "columns": [
+          { "name": "id", "type": "TEXT", "notNull": true, "primaryKey": true },
+          { "name": "phone", "type": "TEXT", "notNull": true },
+          { "name": "password", "type": "TEXT", "notNull": false, "default": null },
+          { "name": "password_changed_at", "type": "INTEGER", "notNull": true, "default": 0 },
+          { "name": "pw_policy_version", "type": "INTEGER", "notNull": true, "default": 0 }
+        ],
+        "indexes": [{ "name": "idx_users_phone", "columns": ["phone"], "unique": true }]
+      }
+    ]
+  },
+  "selftest": {
+    "clean_pair": {
+      "expected": {
+        "name": "t",
+        "columns": [
+          { "name": "id", "type": "INTEGER", "notNull": true },
+          { "name": "data", "type": "TEXT", "notNull": true, "default": "[]" }
+        ],
+        "indexes": [{ "name": "i1", "columns": ["id"], "unique": false }]
+      },
+      "actual": {
+        "columns": [
+          { "name": "id", "type": "INTEGER", "notNull": true, "default": null },
+          { "name": "data", "type": "TEXT", "notNull": true, "default": "'[]'" }
+        ],
+        "indexes": [{ "name": "whatever", "columns": ["id"], "unique": false }]
+      }
+    },
+    "A_cases": [
+      {
+        "id": "缺列",
+        "expect_diff": "column-missing",
+        "expected": { "columns": [{ "name": "a", "type": "TEXT", "notNull": true }, { "name": "b", "type": "TEXT", "notNull": false }], "indexes": [] },
+        "actual": { "columns": [{ "name": "a", "type": "TEXT", "notNull": true }], "indexes": [] }
+      },
+      {
+        "id": "多列",
+        "expect_diff": "column-extra",
+        "expected": { "columns": [{ "name": "a", "type": "TEXT", "notNull": true }], "indexes": [] },
+        "actual": { "columns": [{ "name": "a", "type": "TEXT", "notNull": true }, { "name": "ghost", "type": "TEXT", "notNull": false }], "indexes": [] }
+      },
+      {
+        "id": "类型漂移（pg VARCHAR vs sqlite TEXT 不算漂移，TEXT vs INTEGER 才算）",
+        "expect_diff": "type-mismatch",
+        "driver": "pg",
+        "expected": { "columns": [{ "name": "phone", "type": "varchar(11)", "notNull": true }], "indexes": [] },
+        "actual": { "columns": [{ "name": "phone", "type": "integer", "notNull": true }], "indexes": [] }
+      },
+      {
+        "id": "NOT NULL 漂移",
+        "expect_diff": "notnull-mismatch",
+        "expected": { "columns": [{ "name": "sync_version", "type": "INTEGER", "notNull": true, "default": 0 }], "indexes": [] },
+        "actual": { "columns": [{ "name": "sync_version", "type": "INTEGER", "notNull": false, "default": 0 }], "indexes": [] }
+      },
+      {
+        "id": "默认值漂移",
+        "expect_diff": "default-mismatch",
+        "expected": { "columns": [{ "name": "tombstones", "type": "TEXT", "notNull": true, "default": "[]" }], "indexes": [] },
+        "actual": { "columns": [{ "name": "tombstones", "type": "TEXT", "notNull": true, "default": null }], "indexes": [] }
+      },
+      {
+        "id": "缺索引",
+        "expect_diff": "index-missing",
+        "expected": { "columns": [{ "name": "user_id", "type": "INTEGER", "notNull": true }], "indexes": [{ "name": "ix1", "columns": ["user_id", "created_at"], "unique": false }] },
+        "actual": { "columns": [{ "name": "user_id", "type": "INTEGER", "notNull": true }, { "name": "created_at", "type": "INTEGER", "notNull": true }], "indexes": [] }
+      },
+      {
+        "id": "多索引",
+        "expect_diff": "index-extra",
+        "expected": { "columns": [{ "name": "user_id", "type": "INTEGER", "notNull": true }], "indexes": [] },
+        "actual": { "columns": [{ "name": "user_id", "type": "INTEGER", "notNull": true }], "indexes": [{ "name": "surprise", "columns": ["user_id"], "unique": true }] }
+      }
+    ]
+  },
+  "sqlite_roundtrip": [
+    {
+      "name": "users_parity_probe",
+      "columns": [
+        { "name": "id", "type": "TEXT", "notNull": true, "primaryKey": true },
+        { "name": "phone", "type": "TEXT", "notNull": true },
+        { "name": "password", "type": "TEXT", "notNull": false, "default": null },
+        { "name": "password_changed_at", "type": "INTEGER", "notNull": true, "default": 0 },
+        { "name": "pw_policy_version", "type": "INTEGER", "notNull": true, "default": 0 },
+        { "name": "data", "type": "TEXT", "notNull": true, "default": "[]" }
+      ],
+      "indexes": [
+        { "name": "idx_users_parity_probe_phone", "columns": ["phone"], "unique": true },
+        { "name": "idx_users_parity_probe_policy", "columns": ["pw_policy_version", "password_changed_at"], "unique": false }
+      ]
+    },
+    {
+      "name": "review_snapshots",
+      "columns": [
+        { "name": "id", "type": "INTEGER", "notNull": true },
+        { "name": "user_id", "type": "TEXT", "notNull": true },
+        { "name": "word", "type": "TEXT", "notNull": true },
+        { "name": "prev_data", "type": "TEXT", "notNull": false, "default": null },
+        { "name": "prev_due", "type": "INTEGER", "notNull": false, "default": null },
+        { "name": "reps_before", "type": "INTEGER", "notNull": true, "default": 0 },
+        { "name": "created_at", "type": "INTEGER", "notNull": true, "default": 0 }
+      ],
+      "indexes": [
+        { "name": "idx_review_snapshots_user_id_word_created_at", "columns": ["user_id", "word", "created_at"], "unique": false }
+      ]
+    }
+  ],
+  "b_cases": {
+    "$comment": "§6.2 第 4 步：同一份 fixtures 两驱动各跑一遍。id 全部固定（不外键自增），时间戳统一由 service 传 now=1700000000000，对账前再归一为序号。",
+    "now": 1700000000000,
+    "empty_password_account": { "id": "u_empty", "phone": "13800000001", "password": null, "password_changed_at": 0, "pw_policy_version": 0 },
+    "legacy_policy_version_account": { "id": "u_legacy", "phone": "13800000002", "password": "$2a$10$0123456789012345678901234567890a", "password_changed_at": 0, "pw_policy_version": 0 },
+    "new_policy_account": { "id": "u_new", "phone": "13800000003", "password": "$2a$10$abcdefghijklmnopqrstuv", "password_changed_at": 1700000000000, "pw_policy_version": 1 },
+    "empty_string_password_account": { "id": "u_blank_pw", "phone": "13800000004", "password": "", "password_changed_at": 0, "pw_policy_version": 0 },
+    "chinese_word": { "word": "苹果／记忆", "translation": "名词：苹果", "addedAt": 1700000000000 },
+    "long_word": { "word": "pneumonoultramicroscopicsilicovolcanoconiosis-with-a-very-long-tail-0123456789", "translation": "人工造的超长词（69 字符）", "addedAt": 1700000000001 },
+    "wordbook_incremental_add": { "userId_tail": "1", "entries": [{ "word": "apple", "addedAt": 1700000000002 }, { "word": "banana", "addedAt": 1700000000003 }] },
+    "wordbook_whole_array": [{ "word": "apple", "addedAt": 1700000000002 }, { "word": "banana", "addedAt": 1700000000003 }],
+    "review_apply_rating_4": { "word": "apple", "rating": 4, "expected_rating_values": [1, 2, 3, 4] },
+    "snapshot_undo": { "word": "apple", "expect_prev_data_restored": true }
+  },
+  "c_cases": {
+    "$comment": "§6.2 第 5 步：长度语义在两库必须同结论（都接受 / 都拒绝）。phone 的收口在 db/types.ts 的 assertPhone()，不在列类型上。",
+    "phone": {
+      "valid": "13800000000",
+      "invalid_too_short": "1380000000",
+      "invalid_too_long": "138000000001",
+      "invalid_pattern": "12800000000"
+    },
+    "password": {
+      "at_72_bytes": "012345678901234567890123456789012345678901234567890123456789012345678901",
+      "over_72_bytes": "0123456789012345678901234567890123456789012345678901234567890123456789012",
+      "below_min": "1234567",
+      "at_min": "12345678"
+    },
+    "data_array": {
+      "under_limit": { "count": 19999, "item": { "word": "w", "addedAt": 1700000000000 } },
+      "at_limit": { "count": 20000, "item": { "word": "w", "addedAt": 1700000000000 } },
+      "over_limit": { "count": 20001, "item": { "word": "w", "addedAt": 1700000000000 } }
+    }
+  }
+}

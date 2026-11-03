@@ -1,0 +1,150 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`判据④：R-06② 四处契约快照测试锁定 key 集合 > key 集合快照（改名/加键/删键都会在这里红，改前先对齐消费方） 1`] = `
+{
+  "lookup": {
+    "en2zhFallback": [
+      "word",
+      "phonetic",
+      "translation",
+      "groups",
+      "exchange",
+      "examples",
+      "notFound",
+    ],
+    "en2zhSuccess": [
+      "word",
+      "phonetic",
+      "translation",
+      "definition",
+      "groups",
+      "exchange",
+      "examples",
+      "freq",
+      "tag",
+      "detail",
+      "audio",
+    ],
+    "example": [
+      "en",
+      "zh",
+    ],
+    "group": [
+      "pos",
+      "meanings",
+    ],
+    "mixed": [
+      "query",
+      "sourceLang",
+      "results",
+      "error",
+    ],
+    "recentItem": [
+      "word",
+      "direction",
+      "gloss",
+      "at",
+    ],
+    "zh2en": [
+      "query",
+      "sourceLang",
+      "results",
+      "error",
+    ],
+    "zh2enEntry": [
+      "word",
+      "pos",
+      "definition",
+      "examples",
+      "synonyms",
+      "phonetic",
+    ],
+  },
+  "profile": {
+    "avatarInput": [
+      "dataUrl",
+      "declaredBytes",
+    ],
+    "dto": [
+      "user_id",
+      "phone",
+      "nickname",
+      "avatar",
+      "daily_goal",
+      "updated_at",
+      "hasPassword",
+      "pwPolicyVersion",
+    ],
+    "row": [
+      "user_id",
+      "nickname",
+      "avatar",
+      "daily_goal",
+      "updated_at",
+    ],
+    "updateInput": [
+      "nickname",
+      "avatar",
+      "daily_goal",
+      "dailyGoal",
+    ],
+    "userRow": [
+      "id",
+      "phone",
+      "password",
+      "created_at",
+    ],
+  },
+  "rating": {
+    "queueItem": [
+      "word",
+      "hasCard",
+      "gloss",
+    ],
+    "queueResult": [
+      "mode",
+      "total",
+      "dueToday",
+      "queue",
+    ],
+    "reviewInput": [
+      "word",
+      "rating",
+    ],
+    "reviewResult": [
+      "word",
+      "due",
+      "state",
+      "reps",
+      "lapses",
+      "rating",
+      "reviewedAt",
+    ],
+  },
+  "wordbook": {
+    "entry": [
+      "word",
+      "addedAt",
+      "lastReview",
+      "reviewCount",
+    ],
+    "pullResult": [
+      "version",
+      "updatedAt",
+      "entries",
+    ],
+    "pushInput": [
+      "baseVersion",
+      "entries",
+      "removedWords",
+    ],
+    "pushResult": [
+      "ok",
+      "version",
+      "merged",
+      "added",
+      "removed",
+    ],
+  },
+}
+`;

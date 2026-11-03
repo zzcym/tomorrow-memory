@@ -1,0 +1,21 @@
+:root {
+  --brand: #3f7d6e;
+  --brand-strong: hsl(166 33% 31%);
+  --surface: #f7f6f2;
+  --surface-elevated: #fffefb;
+  --surface-inverse: #16171a;
+  --ink: #1c1d21;
+  --ink-muted: #5b5f66;
+  --ink-high: #f2f3f5;
+  --ink-inverse: #ffffff;
+  --hair: #e2e0d9;
+  --font-sans: 'Noto Sans SC', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #14151a;
+    --ink: #eceae4;
+    --hair: #2b2d34;
+  }
+}

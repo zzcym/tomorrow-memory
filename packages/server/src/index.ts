@@ -30,7 +30,7 @@ import type { AgentDeps } from '@tm/agent';
 import { LlmRouter } from '@tm/agent';
 
 // ===== 类型导出（供 apps/web 的 tRPC Client 使用；type-only import 无运行时副作用） =====
-export type { AppRouter } from './trpc/router.js';
+export type { AppRouter } from './trpc/routers/index.js';
 export type { TrpcContext } from './trpc/init.js';
 
 async function main(): Promise<void> {

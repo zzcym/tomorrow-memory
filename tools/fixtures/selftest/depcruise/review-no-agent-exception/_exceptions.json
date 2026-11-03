@@ -1,0 +1,28 @@
+{
+  "$comment": "A-28-2：探针自带例外台账。`--self-test` 的 A-19 疫苗与「过期例外仍判红」两条探针过去直接读 tools/exceptions.json，一旦 T-10 把 review-no-agent 的在用例外删掉（那正是它们该删的时候），前置条件就没了 ⇒ 探针恒红 = 活缺陷依赖，等于没修。现在这两条探针只吃本文件：fixture 目录随 review-no-agent-exception 一起被拷进临时目录，由 .dependency-cruiser.cjs 经 TM_EXCEPTIONS_FILE 读入。真仓库的 tools/exceptions.json 加不加、删不删条目都不影响这两条的用例结论。",
+  "semantics": "与 tools/exceptions.json 同一套字段与过期语义（cursor >= expires_after 即过期）；gate_cursor 故意缺省，探针每次显式传游标。",
+  "exceptions": [
+    {
+      "id": "legacy-review-routes-import-agent",
+      "engine": "depcruise",
+      "rule": "review-no-agent",
+      "from": "packages/server/src/routes/review.ts",
+      "to": "^packages/agent/",
+      "owner": "T-02",
+      "expires_after": "T-10",
+      "reason": "疫苗 fixture 自持条目①（在用游标下豁免 E1 这一对 from→to）。",
+      "evidence": "tools/fixtures/selftest/depcruise/review-no-agent-exception/packages/server/src/routes/review.ts"
+    },
+    {
+      "id": "legacy-review-trpc-router-import-agent",
+      "engine": "depcruise",
+      "rule": "review-no-agent",
+      "from": "packages/server/src/trpc/routers/review.ts",
+      "to": "^packages/agent/",
+      "owner": "T-02",
+      "expires_after": "T-12",
+      "reason": "疫苗 fixture 自持条目②：登记的 to 只覆盖 ^packages/agent/，不含 to 侧另一半 services/analyst.ts ⇒ E3 在两个游标下都必须仍判红（自证 to 侧没有反向失明）。expires_after 与①不同，用来让 lenient/strict 两个游标由条目自己推出来、不写死 T-NN。",
+      "evidence": "tools/fixtures/selftest/depcruise/review-no-agent-exception/packages/server/src/trpc/routers/review.ts"
+    }
+  ]
+}

@@ -58,6 +58,20 @@ export interface AppConfig {
   publicDir: string;
   /** CORS 允许来源（多个用逗号分隔；默认 * 便于开发） */
   corsOrigin: string;
+  /**
+   * T-07（§4.4.4 / R-40④）：运行时开关种子的**原始环境变量值**（`FEATURE_FLAGS_JSON`）。
+   * 解析在 `services/feature-flags.ts` 的 `parseFlagsSeed()`（唯一实现），
+   * 装配层 `app.ts` 调它 → 本文件不 import services，保持依赖方向单一。
+   * 表 `feature_flags` 里的行永远优先于这里；两处都没有时回退
+   * `@tm/shared/constants/flags` 的 PRD §6.4-7 初值（唯一真相，此处不落第二份默认值）。
+   */
+  featureFlagsSeedJson: string;
+  /** T-07 / R-17⑨：App 最新版本号（缺省 = 服务端自身版本，不触发提示） */
+  appLatestVersion: string;
+  /** T-07 / R-17⑨：APK 直链。**未配置时 `GET /api/version` 的 `url` 为空串**，客户端不提示（不编造直链） */
+  apkDownloadUrl: string;
+  /** T-07 / R-17⑨：更新说明（可选） */
+  appReleaseNotes: string;
 }
 
 function str(name: string, fallback = ''): string {
@@ -104,6 +118,11 @@ export function loadConfig(): AppConfig {
     dataDir,
     publicDir: str('PUBLIC_DIR', path.join(PROJECT_ROOT, 'public')),
     corsOrigin: str('CORS_ORIGIN', '*'),
+    // ── T-07 追加（§4.4.4 开关种子 / R-17⑨ 版本清单）──
+    featureFlagsSeedJson: str('FEATURE_FLAGS_JSON', ''),
+    appLatestVersion: str('APP_LATEST_VERSION', ''),
+    apkDownloadUrl: str('APK_DOWNLOAD_URL', ''),
+    appReleaseNotes: str('APP_RELEASE_NOTES', ''),
   };
 
   if (config.dbDriver === 'pg' && config.databaseUrl === '') {

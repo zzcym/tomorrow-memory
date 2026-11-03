@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+overrides:
+  react: ^19.2.8
+  '@types/react': ~19.2.0
+

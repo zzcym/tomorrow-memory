@@ -1,0 +1,10 @@
+diff --git a/apps/web/package.json b/apps/web/package.json
+index 1111111..2222222 100644
+--- a/apps/web/package.json
++++ b/apps/web/package.json
+@@ -9,4 +9,4 @@
+   "dependencies": {
+     "next": "15.5.4",
+-    "react": "19.2.8",
++    "react": "^19.2.0",
+     "react-dom": "19.2.8"

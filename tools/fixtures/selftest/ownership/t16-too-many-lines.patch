@@ -1,0 +1,18 @@
+diff --git a/apps/web/src/app/layout.tsx b/apps/web/src/app/layout.tsx
+index 1111111..2222222 100644
+--- a/apps/web/src/app/layout.tsx
++++ b/apps/web/src/app/layout.tsx
+@@ -1,7 +1,12 @@
+ import type { ReactNode } from 'react';
+ import './globals.css';
++import { AuthWall } from '@tm/ui/auth';
+ 
+ export default function RootLayout({ children }: { children: ReactNode }) {
++  const shell = 'bg-surface text-ink';
++  const lang = 'zh-CN';
++  return (
++    <html lang={lang}>
++      <body className={shell}>
+     <AuthWall>{children}</AuthWall>
+   </body>
+ }

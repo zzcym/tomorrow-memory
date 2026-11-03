@@ -2,6 +2,7 @@
 export {};
 
 import WebSocket from 'ws';
+import { runWhenDirect } from './entry-guard.js';
 
 async function main(): Promise<void> {
   // 登录拿 token
@@ -81,7 +82,5 @@ async function main(): Promise<void> {
   }, 20000);
 }
 
-main().catch((err) => {
-  console.error('测试失败:', err);
-  process.exit(1);
-});
+/** A-18-1：只有作为入口被直接执行时才跑（原先无条件 `main().catch(...)`，被 import 就会连 WS/HTTP 打真服务）。 */
+runWhenDirect(main, 'WebSocket 对话测试', import.meta.url);

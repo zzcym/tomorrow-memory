@@ -6,6 +6,7 @@
  */
 
 import type {
+  AnalysisPeriod,
   AnalyticsDataset,
   CefrBucket,
   ForgettingBucket,
@@ -17,8 +18,6 @@ import { cardFromJson } from '@tm/agent';
 import type { AppDB } from '../db/types.js';
 import type { ClickHouseClient } from './clickhouse.js';
 import type { DictSources } from './dict-sources.js';
-
-export type AnalysisPeriod = '7d' | '30d' | '90d' | 'all';
 
 /** collins 星级 → CEFR 启发式映射（高频词 = 更低等级） */
 function collinsToCefr(collins: number | null): string {

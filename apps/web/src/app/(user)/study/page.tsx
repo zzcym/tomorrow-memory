@@ -1,283 +1,121 @@
 'use client';
 
 /**
- * 背单词页面（Flashcard）
- * - 三种模式：顺序 / 随机 / 间隔（FSRS 调度）
- * - 手势滑动 + 键盘快捷键（空格翻转、← → 切换）
- * - 顶部进度条：今日已复习 / 待复习总数
- * - 完成每日目标后触发打卡弹窗
+ * 背单词页（§10.2 T-15 行 ✏️`app/(user)/study/page.tsx`，283 → 本文件 ≤120 行）。
+ *
+ * 收口的四处现网缺陷（判据①②⑤）：卡面不再自绘（`components/flashcard.tsx` 已 🗑️，卡体走
+ * `study/card-view.tsx` → `@tm/ui/patterns/{Flashcard,RatingBar}`）；三模式 `?mode=` 以地址为唯一
+ * 真源、`new|selfTest` 的评分与撤销在 `useReviewSession()` 首行即返回 ⇒ 网络层 0 条 `reviewCard`
+ * （判据①）；走完最后一张不再 `setIndex(0)` 回首张而是落**常驻完成页** `SessionSummary`（R-13②）；
+ * 达每日目标不再弹打卡 `Dialog`，打卡是完成页里常驻可点的一行（判据②）。
+ *
+ * 页面只做接线：取数在 `lib/api/*`，四组牌组级状态在 `study/deck-states.tsx`，
+ * 文案全部 import 自 `@tm/shared`（页面与组件零中文字面量）。
  */
 
 import * as React from 'react';
-import { ArrowLeft, ArrowRight, Check, RotateCcw, Shuffle, X } from 'lucide-react';
-import { toast } from 'sonner';
-import { trpc } from '@/lib/trpc';
-import { useAuthed } from '@/lib/use-auth';
-import { Flashcard, type FlashcardData } from '@/components/flashcard';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import type { LookupEn2ZhFallback, LookupEn2ZhSuccess } from '@tm/shared';
-
-type Mode = 'ordered' | 'random' | 'fsrs';
-
-const MODES: Array<{ value: Mode; label: string; icon: typeof Shuffle }> = [
-  { value: 'ordered', label: '顺序', icon: ArrowRight },
-  { value: 'random', label: '随机', icon: Shuffle },
-  { value: 'fsrs', label: '间隔', icon: RotateCcw },
-];
-
-interface StudyCard extends FlashcardData {
-  loading?: boolean;
-}
+import { useRouter, useSearchParams } from 'next/navigation';
+import { STUDY_COPY, type RatingValue } from '@tm/shared';
+import { useHost } from '@tm/ui';
+import { AuthGate } from '@/components/auth-gate';
+import { CardView } from '@/components/study/card-view';
+import { QueueSwitch } from '@/components/study/queue-switch';
+import { SessionSummary } from '@/components/study/session-summary';
+import { StudyEmptyQueue, StudyFetchFail, StudyLoading, StudyRateFail, StudySignedOut } from '@/components/study/deck-states';
+import { useFavorite } from '@/components/favorite-button';
+import { HOST_STUDY_COPY, studyHref, studyModeFromParam, useReviewSession, useStudyDeck, wordHref, type LastRated, type StudyMode } from '@/lib/api/review';
+import { useCheckin } from '@/lib/api/profile';
 
 export default function StudyPage(): React.JSX.Element {
-  const [mode, setMode] = React.useState<Mode>('fsrs');
+  // T-28 / R-23②：页面主体套 `<AuthGate>` —— 游客 = 默认 `<LoginWall>`，idle = 骨架，authed = 原内容。
+  // 牌组数据层的 `StudySignedOut` 分支留在 `StudyInner` 内（token 在但服务端判未登录的兜底），不重写。
+  return (
+    <AuthGate>
+      {/* Next 15：`useSearchParams()` 要求页面自带 Suspense 边界（`(user)/layout.tsx` 归 T-12，不动它）。 */}
+      <React.Suspense fallback={null}><StudyInner /></React.Suspense>
+    </AuthGate>
+  );
+}
+
+function StudyInner(): React.JSX.Element {
+  const host = useHost();
+  const router = useRouter();
+  /** `?mode=` 是唯一真源：换地址 = 换牌组 = 本轮重新开始（可分享、可回退）。 */
+  const mode = studyModeFromParam(useSearchParams().get('mode'));
+  const deck = useStudyDeck(mode);
+  const session = useReviewSession();
+  const checkin = useCheckin();
   const [index, setIndex] = React.useState(0);
   const [flipped, setFlipped] = React.useState(false);
-  const [reviewed, setReviewed] = React.useState<string[]>([]);
-  const [checkinOpen, setCheckinOpen] = React.useState(false);
-  const [words, setWords] = React.useState<StudyCard[]>([]);
+  const [closed, setClosed] = React.useState(false);
+  const [cards, setCards] = React.useState(0);
+  const [counts, setCounts] = React.useState<Partial<Record<RatingValue, number>>>({});
+  const startedAt = React.useRef(Date.now());
+  const card = deck.cards[index];
+  const total = deck.cards.length;
+  const goal = deck.dailyGoal || checkin.dailyGoal;
+  const last = session.lastRated as LastRated | null;
+  /** 钩子无条件调用：无卡位时传空串，那一支的星标按钮根本没渲染（判据⑤ 只走这一条路）。 */
+  const favorite = useFavorite(card?.word ?? '');
+  const goLookup = (): void => host.navigate('/');
+  const setMode = (next: StudyMode): void => router.replace(studyHref(next));
+  const switcher = <QueueSwitch mode={mode} onChange={setMode} due={deck.dueToday} disabled={deck.pending} />;
 
-  const authed = useAuthed();
-  const utils = trpc.useUtils();
-  // refetchOnWindowFocus 关闭：后台重取返回新数组引用会重建牌组、丢失学习进度
-  const wordbook = trpc.wordbook.list.useQuery(undefined, {
-    enabled: authed,
-    refetchOnWindowFocus: false,
-  });
-  const reviewToday = trpc.review.today.useQuery(undefined, {
-    enabled: authed && mode === 'fsrs',
-    refetchOnWindowFocus: false,
-  });
-  const checkinStatus = trpc.checkin.status.useQuery(undefined, { enabled: authed });
-  const checkin = trpc.checkin.create.useMutation({
-    onSuccess: (data) => {
-      toast.success(`打卡成功！连续 ${data.streak} 天`);
-      void utils.checkin.status.invalidate();
-    },
-    onError: () => toast.error('打卡失败，请稍后重试'),
-  });
-  const reviewCard = trpc.review.reviewCard.useMutation({
-    // 评分丢失会让 FSRS 记忆状态与用户认知脱节，必须显式提示
-    onError: () => toast.error('评分提交失败，请稍后重试'),
-  });
-
-  const dailyGoal = checkinStatus.data?.dailyGoal ?? 10;
-
-  // 根据模式构建单词序列（依赖真实数据变化；refetch 已关，不会被窗口聚焦打断）
+  // 换模式 / 换牌组 = 本轮重来：指针、计数、撤销窗口与计时一起复位。
   React.useEffect(() => {
-    if (!authed) return;
-    let base: string[];
-    if (mode === 'fsrs') {
-      base = (reviewToday.data?.queue ?? []).map((q) => q.word);
-    } else {
-      base = (wordbook.data ?? []).map((e) => e.word);
-      if (mode === 'random') base = [...base].sort(() => Math.random() - 0.5);
-    }
-    setWords(base.map((w) => ({ word: w, loading: true })));
-    setIndex(0);
+    setIndex(0); setFlipped(false); setClosed(false); setCards(0); setCounts({});
+    startedAt.current = Date.now(); session.reset();
+  }, [mode, deck.total]);
+
+  const goNext = (): void => {
     setFlipped(false);
-    setReviewed([]);
-  }, [mode, authed, wordbook.data, reviewToday.data]);
-
-  // 逐个加载释义（静态查词）：每次补齐最早的未加载项，加载完成后 words 变化触发下一轮
-  const nextLoadingIndex = words.findIndex((w) => w.loading);
-  React.useEffect(() => {
-    if (nextLoadingIndex < 0) return;
-    const target = words[nextLoadingIndex];
-    if (!target) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const resp = await fetch(`/api/lookup?word=${encodeURIComponent(target.word)}&direction=en2zh`);
-        const json = (await resp.json()) as LookupEn2ZhSuccess | LookupEn2ZhFallback | { error?: string };
-        if (cancelled) return;
-        setWords((prev) =>
-          prev.map((w) => {
-            if (w.word !== target.word || !w.loading) return w;
-            if ('error' in json) return { ...w, loading: false };
-            const hit = json as LookupEn2ZhSuccess | LookupEn2ZhFallback;
-            return {
-              ...w,
-              loading: false,
-              phonetic: 'phonetic' in hit ? hit.phonetic : undefined,
-              groups: 'groups' in hit ? hit.groups : undefined,
-              examples: 'examples' in hit ? hit.examples.slice(0, 1) : undefined,
-            };
-          }),
-        );
-      } catch {
-        if (!cancelled) {
-          setWords((prev) =>
-            prev.map((w) => (w.word === target.word && w.loading ? { ...w, loading: false } : w)),
-          );
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [words, nextLoadingIndex]);
-
-  const current = words[index];
-
-  const advanceRef = React.useRef<(rating?: 1 | 2 | 3 | 4) => void>(() => {});
-  const advance = (rating?: 1 | 2 | 3 | 4): void => {
-    if (!current) return;
-    // 记录复习（FSRS 模式）
-    if (rating && authed) {
-      reviewCard.mutate({ word: current.word, rating });
-    }
-    setReviewed((prev) => (prev.includes(current.word) ? prev : [...prev, current.word]));
-    setFlipped(false);
-    if (index + 1 < words.length) {
-      setIndex((i) => i + 1);
-    } else {
-      // 学完一轮
-      if (reviewed.length + 1 >= dailyGoal && !checkinStatus.data?.checkedIn) {
-        setCheckinOpen(true);
-      } else {
-        toast.success('本轮学习完成！');
-      }
-      setIndex(0);
-    }
+    if (index + 1 < total) setIndex(index + 1);
+    else setClosed(true);
   };
-  advanceRef.current = advance;
-
-  const handleSwipe = (dir: 'left' | 'right'): void => {
-    if (!current) return;
-    // 左滑 = 不会（Again=1），右滑 = 已掌握（Good=3）
-    advance(dir === 'left' ? 1 : 3);
+  const rate = (rating: RatingValue): void => {
+    if (!card) return;
+    session.rate(mode, card.word, rating, index);
+    setCards((n) => n + 1);
+    setCounts((prev) => ({ ...prev, [rating]: (prev[rating] ?? 0) + 1 }));
+    goNext();
+  };
+  /** 撤销窗口只在"已走到下一张"后挂出（R-11④）；撤满 `UNDO_MAX_PER_SESSION` 次自然消失。 */
+  const undo = last && session.undoLeft > 0 && index > last.anchor ? {
+    remaining: session.undoLeft,
+    onUndo: () => session.undoLast(mode, last, (i) => {
+      setClosed(false);
+      setIndex(Math.max(0, i - 1));
+      setFlipped(false);
+      host.toast(STUDY_COPY.undo.toast(i), { tone: 'info' });
+    }),
+  } : null;
+  /** 失败重发只补发同一档那一次：不推进指针、不重复计数（R-11⑤ 不许停留成"已评分"假象）。 */
+  const retryRating = (): void => {
+    session.clearRateFailure();
+    if (last) session.rate(mode, last.word, last.rating, last.anchor);
   };
 
-  // 键盘快捷键（ref 持有最新回调，避免每次渲染重挂监听）
-  React.useEffect(() => {
-    const handler = (e: KeyboardEvent): void => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.code === 'Space') {
-        e.preventDefault();
-        setFlipped((f) => !f);
-      } else if (e.key === 'ArrowLeft') {
-        advanceRef.current(1);
-      } else if (e.key === 'ArrowRight') {
-        advanceRef.current(3);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-
-  if (!authed) {
-    return <p className="py-20 text-center text-muted-foreground">请先登录后开始背单词。</p>;
+  if (!deck.signedIn) return <StudySignedOut />;
+  if (deck.failed) return <StudyFetchFail switcher={switcher} onRetry={deck.retry} onLookup={goLookup} />;
+  if (deck.pending) return <StudyLoading switcher={switcher} />;
+  if (closed) {
+    return <SessionSummary cards={cards} counts={counts} seconds={Math.round((Date.now() - startedAt.current) / 1000)}
+      goal={goal} doneToday={checkin.doneToday} checkedIn={checkin.checkedIn} streak={checkin.streak}
+      checkinPending={checkin.pending} checkinFailed={checkin.failed}
+      onAgain={deck.retry} onCheckIn={checkin.checkIn} onHome={goLookup} />;
   }
-
-  const totalCount = mode === 'fsrs' ? (reviewToday.data?.dueToday ?? 0) : (wordbook.data?.length ?? 0);
-  const progress = totalCount > 0 ? Math.min(100, (reviewed.length / totalCount) * 100) : 0;
+  if (!card) return <StudyEmptyQueue mode={mode} switcher={switcher} onStudyNew={() => setMode('new')} onLookup={goLookup} />;
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col items-center gap-6">
-      {/* 模式选择 + 进度 */}
-      <div className="flex w-full flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-1">
-            {MODES.map((m) => (
-              <Button
-                key={m.value}
-                size="sm"
-                variant={mode === m.value ? 'default' : 'outline'}
-                onClick={() => setMode(m.value)}
-              >
-                <m.icon className="mr-1 h-3.5 w-3.5" />
-                {m.label}
-              </Button>
-            ))}
-          </div>
-          <Badge variant="secondary">
-            已复习 {reviewed.length} / {totalCount}
-          </Badge>
-        </div>
-        <Progress value={progress} />
-      </div>
-
-      {/* 卡片 */}
-      {current ? (
-        <div className="flex w-full flex-col items-center gap-4">
-          <Flashcard
-            key={current.word}
-            data={current}
-            flipped={flipped}
-            onFlip={() => setFlipped((f) => !f)}
-            onSwipe={handleSwipe}
-          />
-          {current.loading && <p className="text-xs text-muted-foreground">加载释义中…</p>}
-          <div className="flex gap-3">
-            <Button variant="destructive" onClick={() => handleSwipe('left')}>
-              <X className="mr-1 h-4 w-4" />
-              不会
-            </Button>
-            <Button variant="outline" onClick={() => setFlipped((f) => !f)}>
-              翻转
-            </Button>
-            <Button onClick={() => handleSwipe('right')}>
-              <Check className="mr-1 h-4 w-4" />
-              已掌握
-            </Button>
-          </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <Button variant="ghost" size="sm" disabled={index === 0} onClick={() => { setIndex((i) => Math.max(0, i - 1)); setFlipped(false); }}>
-              <ArrowLeft className="mr-1 h-3.5 w-3.5" />
-              上一张
-            </Button>
-            <span>{index + 1} / {words.length}</span>
-            <Button variant="ghost" size="sm" disabled={index >= words.length - 1} onClick={() => { setIndex((i) => Math.min(words.length - 1, i + 1)); setFlipped(false); }}>
-              下一张
-              <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">空格翻转 · ← 不会 · → 已掌握</p>
-        </div>
-      ) : (
-        <p className="py-20 text-center text-muted-foreground">
-          {mode === 'fsrs'
-            ? '今天没有到期需要复习的单词。可切换「顺序」或「随机」模式学习全部单词'
-            : '单词本为空，先去查词页添加单词吧'}
-        </p>
-      )}
-
-      {/* 每日目标完成 → 打卡弹窗 */}
-      <Dialog open={checkinOpen} onOpenChange={setCheckinOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>🎉 今日目标达成！</DialogTitle>
-            <DialogDescription>
-              已完成 {dailyGoal} 个单词的复习，打个卡记录今天的学习吧！
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCheckinOpen(false)}>
-              稍后
-            </Button>
-            <Button
-              onClick={() => {
-                checkin.mutate();
-                setCheckinOpen(false);
-              }}
-            >
-              立即打卡
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <div className="h-8" />
+    <div className="mx-auto flex w-full max-w-read flex-col gap-4">
+      {switcher}
+      <CardView card={card} index={index} total={total} done={checkin.doneToday} goal={goal}
+        flipped={flipped} onFlip={() => setFlipped((f) => !f)} onRate={rate} intervals={session.intervals}
+        submitting={session.submitting} undo={undo} loading={session.submitting !== null}
+        onSkip={() => { host.toast(HOST_STUDY_COPY.skipped, { tone: 'info' }); goNext(); }}
+        onRetryGloss={deck.retry} onOpenDetail={() => host.navigate(wordHref(card.word, 'study'))}
+        inBook={favorite.inBook} onToggleFavorite={favorite.toggle} />
+      {session.rateFailed ? <StudyRateFail onRetry={retryRating} /> : null}
     </div>
   );
 }

@@ -14,10 +14,11 @@ import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import { trpc } from '@/lib/trpc';
 import { useAuthed } from '@/lib/use-auth';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { AuthGate } from '@/components/auth-gate';
+import { Button } from '@tm/ui';
+import { Badge } from '@tm/ui';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@tm/ui';
+import { Skeleton } from '@tm/ui';
 import type { AnalystInsight } from '@tm/shared';
 
 // 代码分割：Recharts 图表组件动态导入（重型依赖，按需加载）
@@ -49,7 +50,16 @@ const INSIGHT_LABEL: Record<AnalystInsight['type'], string> = {
   prediction: '预测',
 };
 
+/**
+ * T-28 / R-23②：页面主体套 `<AuthGate>`（游客 = 默认 `<LoginWall>`，idle = 骨架，authed = 原内容）。
+ * 原 `if (!authed) return <p>…</p>` 的"请先登录"句式分支随接线删除 ——
+ * `<AuthGate>` 放行时 `useAuthed()` 必为真，那一行既不可达、也不该再存在于源码里（判据① 的源头）。
+ */
 export default function ReportPage(): React.JSX.Element {
+  return <AuthGate><ReportInner /></AuthGate>;
+}
+
+function ReportInner(): React.JSX.Element {
   const [period, setPeriod] = React.useState<Period>('30d');
   const authed = useAuthed();
 
@@ -65,10 +75,6 @@ export default function ReportPage(): React.JSX.Element {
 
   const dataset = report.data?.dataset;
   const insights = refresh.data?.insights ?? report.data?.insights ?? [];
-
-  if (!authed) {
-    return <p className="py-20 text-center text-muted-foreground">请先登录后查看学情分析。</p>;
-  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">

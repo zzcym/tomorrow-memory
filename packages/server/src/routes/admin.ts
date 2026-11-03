@@ -1,5 +1,15 @@
 /**
  * 管理后台路由
+ *
+ * ⚠ T-07 注：运行时开关的两个端点（`GET|POST /api/admin/flags`，§6.4-2 步 8）**不在本文件**，
+ * 在 `routes/admin-flags.ts`，由 `app.ts` 挂在同一个 `/api/admin` 前缀下、复用同一个 `adminAuth`。
+ * 本文件的既有端点（登录 / 统计 / 备份 / 用户列表）一字未改。
+ *
+ * ⚠ 挂载顺序红线（A-32-3）：`POST /api/admin/login` 是**取 admin token 的唯一自助入口**，
+ * 它自己必须在 `adminAuth` 之前可达。`admin-flags.ts` 的守卫因此只允许写 `/api/admin/flags`，
+ * 不许写成 `/api/admin/*` —— 那会让本条 login 在任何凭据下都只能拿到"未登录"，
+ * 发布 runbook 步 8（改开关）随之不可执行。取证用例：`test/contract/legacy-apk.spec.ts` 的
+ * "真起服 + 真 HTTP" 一节（这类挂载顺序缺陷进程内单测看不见）。
  */
 
 import { Hono } from 'hono';

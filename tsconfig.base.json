@@ -22,6 +22,10 @@
     "paths": {
       "@tm/shared": ["packages/shared/src/index.ts"],
       "@tm/shared/*": ["packages/shared/src/*"],
+      "@tm/ui": ["packages/ui/src/index.ts"],
+      "@tm/ui/*": ["packages/ui/src/*"],
+      "@tm/app": ["apps/app/src/main.tsx"],
+      "@tm/app/*": ["apps/app/src/*"],
       "@tm/agent": ["packages/agent/src/index.ts"],
       "@tm/agent/*": ["packages/agent/src/*"],
       "@tm/server": ["packages/server/src/index.ts"],

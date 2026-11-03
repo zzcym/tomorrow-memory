@@ -1,36 +1,49 @@
 /**
  * 全局共享类型定义
+ *
+ * §3.3 规则①：本文件里的旧 interface **逐步改为 `z.infer` 派生**，但
+ * **不得删除或改名任何已导出的类型名**（`@tm/server`、`apps/web`、`@tm/agent` 都在 import）。
+ * T-03 已派生的部分 = 四个契约覆盖的形状（词本 / 查词 / 评分 / 资料）+ 与它们同形的旧 interface；
+ * 表行与分析数据集一类（`FsrsCardRow` / `*CacheRow` / `Analytics*`）留在本文件，
+ * 等 T-06 的 `schema/**` 落地后再派生（列名是 T-06 的边界）。
  */
 
+import type { ZodTypeAny } from 'zod';
+import type {
+  ProfileRowSchema,
+  UserRowSchema,
+} from './contracts/profile.js';
+import type {
+  LookupEn2ZhFallbackSchema,
+  LookupEn2ZhSuccessSchema,
+  LookupMixedResponseSchema,
+  LookupResponseSchema,
+  LookupZh2EnResponseSchema,
+  SceneExampleSchema,
+  TranslationGroupSchema,
+  ExamplePairSchema,
+  TutorContentSchema,
+  Zh2EnEntrySchema,
+  LookupDirectionSchema,
+} from './contracts/lookup.js';
+import type { WordbookEntryDto, WordbookEntrySchema } from './contracts/wordbook.js';
+
+/**
+ * `z.infer` 的等价写法，但只取类型：本文件保持**纯类型模块**，
+ * 不把 zod 带进 `@tm/shared/types` 的运行时（旧客户端 bundle 里可以因此省掉整包校验器）。
+ */
+type Derived<T extends ZodTypeAny> = T['_output'];
+
 /** 单词本中的单个单词条目（前端 script.js 使用的数据结构，保持向后兼容） */
-export interface WordbookEntry {
-  word: string;
-  /** 加入时间戳（ms） */
-  addedAt?: number;
-  /** 最近复习时间戳（ms） */
-  lastReview?: number;
-  /** 复习次数 */
-  reviewCount?: number;
-  /** 扩展字段：前端可能附加其它信息 */
-  [key: string]: unknown;
-}
+export type WordbookEntry = Derived<typeof WordbookEntrySchema>;
+/** 契约侧同名类型（同一个声明，re-export 便于 `@tm/shared/types` 单点取用）。 */
+export type { WordbookEntryDto };
 
 /** 用户行（users 表） */
-export interface UserRow {
-  id: number;
-  phone: string;
-  password: string | null;
-  created_at: number;
-}
+export type UserRow = Derived<typeof UserRowSchema>;
 
 /** 个人主页行（profiles 表） */
-export interface ProfileRow {
-  user_id: number;
-  nickname: string;
-  avatar: string;
-  daily_goal: number;
-  updated_at: number;
-}
+export type ProfileRow = Derived<typeof ProfileRowSchema>;
 
 /** 管理后台用户列表行 */
 export interface AdminUserRow {
@@ -44,31 +57,13 @@ export interface AdminUserRow {
 }
 
 /** 查词结果——英译中（/api/lookup 响应的一部分，保持兼容） */
-export interface LookupEn2ZhResult {
-  word: string;
-  phonetic: string;
-  translation: string;
-  definition: string;
-  groups: TranslationGroup[];
-  exchange: Record<string, string>;
-  examples: ExamplePair[];
-  freq: number;
-  tag: string;
-  detail: string;
-  audio: string;
-}
+export type LookupEn2ZhResult = Derived<typeof LookupEn2ZhSuccessSchema>;
 
 /** 释义分组：pos = 词性，meanings = 释义列表 */
-export interface TranslationGroup {
-  pos: string;
-  meanings: string[];
-}
+export type TranslationGroup = Derived<typeof TranslationGroupSchema>;
 
 /** 双语例句对 */
-export interface ExamplePair {
-  en: string;
-  zh: string;
-}
+export type ExamplePair = Derived<typeof ExamplePairSchema>;
 
 /** 查词结果——中译英候选（/api/lookup 响应的一部分） */
 export interface LookupZh2EnResult {
@@ -79,35 +74,15 @@ export interface LookupZh2EnResult {
 }
 
 /** 中译英候选词条 */
-export interface Zh2EnEntry {
-  word: string;
-  pos: string;
-  definition: string;
-  examples: ExamplePair[];
-  synonyms: string[];
-  phonetic: string;
-}
+export type Zh2EnEntry = Derived<typeof Zh2EnEntrySchema>;
 
 /** CEFR 语言水平 */
 export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
 /** Tutor 教学内容（LLM structured output 的四类内容） */
-export interface TutorContent {
-  /** 记忆口诀 */
-  mnemonic: string;
-  /** 词根词缀拆解 */
-  wordRoot: string;
-  /** 场景例句（3 个） */
-  sceneExamples: SceneExample[];
-  /** 易混淆词辨析 */
-  confusable: string;
-}
+export type TutorContent = Derived<typeof TutorContentSchema>;
 
-export interface SceneExample {
-  en: string;
-  zh: string;
-  scene: string;
-}
+export type SceneExample = Derived<typeof SceneExampleSchema>;
 
 /** FSRS 复习卡片（fsrs_cards 表行） */
 export interface FsrsCardRow {
@@ -220,6 +195,14 @@ export interface AnalystInsight {
   text: string;
 }
 
+/**
+ * 学情分析周期（本类型的**唯一声明点**）。
+ * 真源原在 `packages/server/src/services/analyst.ts:21`（本轮**不改** `packages/server/**`，那里的同域
+ * 声明与 REST 面 `routes/analyst.ts` 的 `PeriodQuerySchema` 保持原样）；上收 shared 只为消掉 App 侧的
+ * 镜像声明 —— `apps/app/src/data/queries/analyst.ts` 里 T-26b 留的过渡件，下一轮 T-03r2b 换成 `import type`。
+ */
+export type AnalysisPeriod = '7d' | '30d' | '90d' | 'all';
+
 /** 分析报告（图表 + 洞察 + 建议） */
 export interface AnalysisReport {
   dataset: AnalyticsDataset;
@@ -228,49 +211,42 @@ export interface AnalysisReport {
 }
 
 /** 查词方向 */
-export type LookupDirection = 'auto' | 'en2zh' | 'zh2en';
+export type LookupDirection = Derived<typeof LookupDirectionSchema>;
 
 /** 英译中命中（stardict 完整结果，/api/lookup 响应格式） */
-export interface LookupEn2ZhSuccess {
-  word: string;
-  phonetic: string;
-  translation: string;
-  definition: string;
-  groups: TranslationGroup[];
-  exchange: Record<string, string>;
-  examples: ExamplePair[];
-  freq: number;
-  tag: string;
-  detail: string;
-  audio: string;
-}
+export type LookupEn2ZhSuccess = Derived<typeof LookupEn2ZhSuccessSchema>;
 
 /** 英译中 fallback（在线 API 兜底结果） */
-export interface LookupEn2ZhFallback {
-  word: string;
-  phonetic: string;
-  translation: string;
-  groups: TranslationGroup[];
-  exchange: Record<string, string>;
-  examples: ExamplePair[];
-  notFound: boolean;
-}
+export type LookupEn2ZhFallback = Derived<typeof LookupEn2ZhFallbackSchema>;
 
 /** 中译英响应 */
-export interface LookupZh2EnResponse {
-  query: string;
-  sourceLang: 'zh';
-  results: Zh2EnEntry[];
-  error: string | null;
-}
+export type LookupZh2EnResponse = Derived<typeof LookupZh2EnResponseSchema>;
 
 /** 混合语言响应 */
-export interface LookupMixedResponse {
-  query: string;
-  sourceLang: 'mixed';
-  results: [];
-  error: string;
-}
+export type LookupMixedResponse = Derived<typeof LookupMixedResponseSchema>;
 
-/** 查词统一响应 */
-export type LookupResponse = LookupEn2ZhSuccess | LookupEn2ZhFallback | LookupZh2EnResponse | LookupMixedResponse;
+/**
+ * 查词统一响应（**旧形状**：英译中两个分支没有 `sourceLang`，消费方按 `'sourceLang' in r` 窄化）。
+ * 新调用点要判别联合请用 `contracts/lookup.ts` 的 `LookupResultSchema`。
+ */
+export type LookupResponse = Derived<typeof LookupResponseSchema>;
+
+/* ══════════════════════════════════════════════════════════════════
+   以下为 T-03 **新增**导出（§3.3 规则①：只加不改名不删）
+   评分 / 队列 / 资料 DTO —— 让 `@tm/shared` 单入口即可拿到契约派生类型。
+   ══════════════════════════════════════════════════════════════════ */
+
+/** 评分 / 队列 / 资料 / 凭据 DTO 的再导出（`RatingInput` = `1|2|3|4`，字符串形状由 `RatingSchema` 归一）。 */
+export type { RatingInput, ReviewInputDto, ReviewResultDto } from './contracts/rating.js';
+export type { QueueItemDto, ReviewQueueInputDto, ReviewQueueResultDto } from './contracts/review-queue.js';
+export type { ProfileDto, ProfileSummaryDto, ProfileUpdateInputDto, AvatarInputDto } from './contracts/profile.js';
+export type {
+  LoginInputDto,
+  RegisterInputDto,
+  ChangePasswordInputDto,
+  ForceUpgradeInputDto,
+  AuthResultDto,
+  MeResultDto,
+} from './contracts/auth.js';
+export type { RecentSearchItemDto } from './contracts/lookup.js';
+export type { QueueMode, RatingValue } from './constants/limits.js';

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@tm/agent": [
+        "packages/agent/src/index.ts"
+      ],
+      "@tm/shared": [
+        "packages/shared/src/index.ts"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "//": "T-14 独占（A-4）。target/lib 钉在 ES2020 + DOM（架构 §5.1 的 WebView 底线）；`moduleResolution:Bundler` 允许源码里写相对 `./x.js`（A-15），Vite 侧的解析由 vite.config.ts 的 js-to-ts-resolve 插件补齐。",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "noEmit": true
+  },
+  "include": ["src", "test", "vite.config.ts", "tailwind.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}

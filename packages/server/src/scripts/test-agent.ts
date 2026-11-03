@@ -12,10 +12,12 @@ import { DefaultLookupService } from '../services/lookup.js';
 import { loadConfig } from '../config.js';
 import type { AgentDeps } from '@tm/agent';
 import { LlmRouter, runAgent } from '@tm/agent';
-
-const config = loadConfig();
+import { assertExplicitWriteTarget, hasForceDbArg, runWhenDirect } from './entry-guard.js';
 
 async function main(): Promise<void> {
+  // A-18-1：runAgent 会经 fsrsCards/wordbook/tutorCache 写库 → 先过写库目标闸门
+  console.log(`[DB] 写入目标=${await assertExplicitWriteTarget('test-agent', hasForceDbArg())}`);
+  const config = loadConfig();
   const db = createAppDB();
   await db.init();
 
@@ -73,7 +75,5 @@ async function main(): Promise<void> {
   process.exit(pass === cases.length ? 0 : 1);
 }
 
-main().catch((err) => {
-  console.error('测试失败:', err);
-  process.exit(1);
-});
+/** A-18-1：只有作为入口被直接执行时才跑（原先是无条件 `main().catch(...)`，被 import 就会连库写数据）。 */
+runWhenDirect(main, 'Agent 编排集成测试', import.meta.url);

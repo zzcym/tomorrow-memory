@@ -28,6 +28,7 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(true);
         web.setBackgroundColor(0xFFFFFFFF);
         // 头像上传:WebView <input type=file> → 系统文件选择器
         web.setWebChromeClient(new android.webkit.WebChromeClient() {

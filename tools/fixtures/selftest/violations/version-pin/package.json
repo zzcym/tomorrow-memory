@@ -1,0 +1,8 @@
+{
+  "name": "tm-fixtures-version-pin",
+  "pnpm": {
+    "overrides": {
+      "zod": "^3.0.0"
+    }
+  }
+}

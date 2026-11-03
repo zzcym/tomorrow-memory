@@ -1,0 +1,32 @@
+{
+  "name": "@tm/app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//": "T-14 起本文件与 tsconfig.json 由 T-14 独占（A-4）。零新依赖：图标用手写 SVG（不引 lucide，首屏 ≤250KB gzip 的预算给 React + Query）、路由是包内 60 行 hash 路由器（见 src/router.tsx 的契约偏差说明，未引入 react-router-dom，因为它不在 workspace 依赖里且 pnpm-lock.yaml 归 T-01）。版本全部走 workspace 统一值：React 19.2.8 由 pnpm-workspace.yaml 的 overrides 钉死（A-1/A-3），本包只写 ^19.0.0 范围。",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build:only": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --root ../.. --project @tm/app"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.59.0",
+    "@tm/shared": "workspace:*",
+    "@tm/ui": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "vite": "^6.4.3"
+  }
+}

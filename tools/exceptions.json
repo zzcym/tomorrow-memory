@@ -1,0 +1,302 @@
+{
+  "$comment": "T-02 白名单（§2 目录树：只登记既有历史违规，不放宽规则本身）。消费方：.dependency-cruiser.cjs（engine=depcruise）与 tools/boundaries.mjs（engine=boundaries）。",
+  "$changelog": "T-02-fix1 轮（A-10）：按'规则 × 文件'粒度登记存量红。原 `legacy-web-colors` / `legacy-web-colors-report-charts` / `legacy-web-copy` 三条目录级通配（`^apps/web/src/`、`^(apps/web/src|packages/server/src)/`）已拆为逐文件条目 —— A-10 明令'不许用一条通配把整个 apps/web 放过'。所有拆分条目的 rule/owner/expires_after 与原条目一致（不新增豁免），只把命中面收窄到实测文件；`packages/server/src` 的残余通配见 `legacy-server-copy-residual` 的 reason（A-10 表未覆盖服务端文案，待 TPM 复核）。真实命中清单来源见各条 evidence 与 04-dev-report-T-02-fix1.md。 | T-02-fix2 轮（A-11 / A-12）：新增 2 条 `route-string-preserved` 例外（`legacy-auth-route-login-compat` / `legacy-auth-route-register-compat`），粒度 = assertion × file × term，evidence 是 `node tools/boundaries.mjs --routes --json` 的实测命中行（auth.ts:54 / auth.ts:26）。同轮 A-11 把 `helpRecoveryAnswer` 定稿换成不含禁词的普通字面量，未改动 BANNED_TERMS 词表、未删除任何断言、未把任何规则降级为 warn。 | 批次1 出口修复轮（A-16）：只改 `legacy-web-charts-colors` / `legacy-web-charts-purple` 两条的归属字段（owner 按 §10.4 第 735 行的拆分线写成 per-file 的 T-05 / T-15，expires_after 取该条文件集里最早的 T-05）。未增删条目、未改 assertion、未改 file 命中面、未放宽任何规则。 | 门禁完整性修复轮（A-19）：修好 `.dependency-cruiser.cjs:materialize()` 的假绿缺陷后，`review-no-agent` 首次真正咬人 → 新暴露 15 条红，全部来自 `packages/server/src/trpc/routers/review.ts`。按 A-19 第 3 条的唯一授权新增 1 条例外 `legacy-review-trpc-router-import-agent`（规则 × 文件 × to，owner=T-10 / expires_after=T-10，to 逐条枚举实测的 15 个可达闭包模块，不用目录通配）。除此之外本轮未增删任何条目、未放宽任何规则。",
+  "semantics": {
+    "cursor": "当前任务号取 env TM_TASK，否则取本文件的 gate_cursor。",
+    "expiry": "num(cursor) >= num(expires_after) ⇒ 例外过期 ⇒ 违规重新计红。规则在 T-XX 自己开工时就应当不再享受该例外（T-XX 的活就是消掉它）。",
+    "depcruise": "engine=depcruise 的条目由 .dependency-cruiser.cjs 在加载时展开成 `<rule>__exc_<id>` 变体规则：只豁免登记的 (from,to) 一对，同一规则对其他 from/to 组合照旧全红。A-19 修复后此语义才真正成立 —— 修复前主干规则被并进了自己的 from.path，有例外的规则整条惰性。",
+    "boundaries": "engine=boundaries 的条目按 assertion + file(正则) + term(可选) 命中才豁免，只少报登记的那几行。",
+    "stale": "例外已不匹配任何违规 → 脚本只提示（不阻断），提示删除，避免白名单无限膨胀。",
+    "hard_rule": "过期例外仍存在即红（F-4 / T-08 判据④）。任何条目都必须带 expires_after=T-XX 与 owner，缺失即 --self-test 之外的运行模式直接红。"
+  },
+  "gate_cursor": "T-02",
+  "exceptions": [
+    {
+      "id": "legacy-mobile-memory",
+      "engine": "boundaries",
+      "assertion": "colors-no-hardcode",
+      "file": "^mobile-memory/",
+      "owner": "T-20",
+      "expires_after": "T-20",
+      "reason": "手写版 App 的 style.css/index.html 内含 hex；Q6 定案 main 上由 apps/app 构建产物取代（T-20 删除 4 个源文件）。原生 res/values*/colors.xml 按 UI §5.4 是允许的颜色落点，不在本例外内（由 allow_paths 单独放行）。",
+      "evidence": "node tools/boundaries.mjs --colors 的 mobile-memory 命中"
+    },
+    {
+      "id": "legacy-server-copy-agent-errors",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^packages/agent/src/",
+      "owner": "T-11",
+      "expires_after": "T-11",
+      "reason": "agent 侧对外可见的错误文案（§4.6 收敛后由 shared/errors.ts 提供）。",
+      "evidence": "node tools/boundaries.mjs --copy 的 packages/agent 命中"
+    },
+    {
+      "id": "legacy-migration-forbidden-words",
+      "engine": "boundaries",
+      "assertion": "migration-forbidden",
+      "file": "^(packages/server/src/db/(sqlite|pg)\\.ts|packages/server/src/scripts/)",
+      "owner": "T-06",
+      "expires_after": "T-06",
+      "reason": "§6.1 迁移禁词在存量建表 DDL 里的命中：现 sqlite.ts/pg.ts 的建表语句含 CREATE TABLE IF NOT EXISTS + 早期一次性 ALTER（历史遗留），T-06 把 DDL 改从 @tm/shared/schema 生成后必须清零。真正的红线（DROP/RENAME/ALTER COLUMN/回填 UPDATE）在任何时候都不豁免——本条目只覆盖 CREATE/索引类的误报面。",
+      "evidence": "node tools/boundaries.mjs --migrations 的命中清单"
+    },
+    {
+      "id": "legacy-prod-password-scripts",
+      "engine": "boundaries",
+      "assertion": "password-write-points",
+      "file": "^scripts/",
+      "owner": "T-21",
+      "expires_after": "T-21",
+      "reason": "scripts/prod-user.sql 与 scripts/prod-create-user.cjs 用 UPDATE users SET password 直写线上账号（§6.5-4 之外的第 4/5 个写入点）。它们不在 shipped 代码里（不计入 kinds=3 的判定域），但登记在此防止被忽略；T-21 收编发布脚本时删除或改造。",
+      "evidence": "grep -rn 'SET password' scripts/ → 2 命中"
+    },
+
+    {
+      "id": "legacy-mobile-copy-api-js",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^mobile-memory/assets/api\\.js$",
+      "owner": "T-20",
+      "expires_after": "T-20",
+      "reason": "A-10 表第 1 行：旧手写 App 的机器话兜底串 `'请求失败'`（api.js:71）。按 Q6 决策冻结并在 T-20 退场（apps/app 构建产物取代），到期即红。",
+      "evidence": "node tools/boundaries.mjs --copy --verbose → mobile-memory/assets/api.js:71"
+    },
+    {
+      "id": "legacy-mobile-copy-app-js",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^mobile-memory/assets/app\\.js$",
+      "owner": "T-20",
+      "expires_after": "T-20",
+      "reason": "A-10 表第 1 行：旧手写 App 的三处旧口径（app.js:260 `'云端'`、app.js:385 `'统计加载失败'`、app.js:848 `'请再按一次'`）。同一文件内后续新增命中也会被本条目吃掉 —— 该文件在 T-20 前整体冻结，不接受新文案。",
+      "evidence": "node tools/boundaries.mjs --copy --verbose → mobile-memory/assets/app.js:260,385,848"
+    },
+    {
+      "id": "legacy-mobile-copy-index-html",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^mobile-memory/assets/index\\.html$",
+      "owner": "T-20",
+      "expires_after": "T-20",
+      "reason": "A-10 表第 1 行：旧手写 App 关于页的 `'云端'` 告知（index.html:78）。T-20 退场/分支保留后删除本条目。",
+      "evidence": "node tools/boundaries.mjs --copy --verbose → mobile-memory/assets/index.html:78"
+    },
+
+    {
+      "id": "legacy-web-copy-assess-page",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^apps/web/src/app/\\(user\\)/assess/page\\.tsx$",
+      "owner": "T-12",
+      "expires_after": "T-16",
+      "reason": "A-10 表第 3 行（文案旧口径 / apps/web 既有页面）：assess 页 :7 注释与 :195 界面标签的 `'掌握度变化'`（§6.2 第 7 行内部术语）。原 `legacy-web-copy` 目录级通配按'规则 × 文件'拆出的同口径条目（不新增豁免）。⚠ §10.2 的 T-12/T-15/T-16 都把 `app/(user)/assess/**` 排除在自己的可改清单外 → 该页无批次 3-4 owner，已在 04-dev-report-T-02-fix1 提请 TPM 指派。",
+      "evidence": "node tools/boundaries.mjs --copy --verbose → apps/web/src/app/(user)/assess/page.tsx:7,195"
+    },
+    {
+      "id": "legacy-web-copy-chat-page",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^apps/web/src/app/\\(user\\)/chat/page\\.tsx$",
+      "owner": "T-12",
+      "expires_after": "T-16",
+      "reason": "A-10 表第 3 行：chat 页 :173 的连接态措辞 `'已连接' / '未连接'`（§6.2 只在断线时出现一句 `PLAIN_TERMS.connectionDown`）。同 `legacy-web-copy` 拆分。⚠ 与 assess 页同样落在 §10.2 的批次 3-4 认领空隙里。",
+      "evidence": "node tools/boundaries.mjs --copy --verbose → apps/web/src/app/(user)/chat/page.tsx:173"
+    },
+    {
+      "id": "legacy-web-copy-report-page",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^apps/web/src/app/\\(user\\)/report/page\\.tsx$",
+      "owner": "T-12",
+      "expires_after": "T-16",
+      "reason": "A-10 表第 3 行：report 页 :79 `'ClickHouse'`/`'未接入'`、:182 `'24h 缓存'`、:199 `'加载失败'`（§6.2 内部术语 + §8.2-12 机器话）。同 `legacy-web-copy` 拆分。⚠ §10.2 未把 `app/(user)/report/**` 指派给批次 3-4 任何任务。",
+      "evidence": "node tools/boundaries.mjs --copy --verbose → apps/web/src/app/(user)/report/page.tsx:79,182,199"
+    },
+    {
+      "id": "legacy-web-copy-admin-page",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^apps/web/src/app/admin/page\\.tsx$",
+      "owner": "T-12",
+      "expires_after": "T-16",
+      "reason": "A-10 表第 3 行：admin 页 :59 的 `'加载失败（${status}）'` 机器话。同 `legacy-web-copy` 拆分；该页是内部后台，PRD §8.3-D 仍按全站 grep 判据对待。",
+      "evidence": "node tools/boundaries.mjs --copy --verbose → apps/web/src/app/admin/page.tsx:59"
+    },
+    {
+      "id": "legacy-web-copy-wordbook-sidebar",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^apps/web/src/components/wordbook-sidebar\\.tsx$",
+      "owner": "T-15",
+      "expires_after": "T-15",
+      "reason": "A-10 表第 3 行：wordbook-sidebar :9 注释与 :100 徽章的 `'云端'`（§6.2 第 6 行 → 唯一合法表述是 `WORDBOOK_COPY.syncBadge`）。owner/expires 取 §10.2 T-15 的认领行（`components/wordbook-sidebar.tsx(瘦身)`），比原通配条目的 T-16 更早咬人。",
+      "evidence": "node tools/boundaries.mjs --copy --verbose → apps/web/src/components/wordbook-sidebar.tsx:9,100"
+    },
+    {
+      "id": "legacy-server-copy-residual",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^packages/server/src/",
+      "owner": "T-12",
+      "expires_after": "T-16",
+      "reason": "A-10 表第 3 行的命中面写的是'`apps/web` 既有页面'，服务端旧口径文案不在裁决表里 → 本条目**不是新登记的豁免**，只是原 `legacy-web-copy`（`^(apps/web/src|packages/server/src)/`）拆掉 apps/web 半边后按原 rule/owner/expires_after 原样保留的另一半，避免本轮顺手把服务端判成从未被裁决过的红（TM_TASK=T-99 实测 9 个文件 37 处：config.ts 1、db/types.ts 1、index.ts 3、routes/auth.ts 1、routes/review.ts 1、services/analyst.ts 7、services/clickhouse.ts 10、services/events.ts 10、trpc/router.ts 3，内容为 `'ClickHouse'`、`'retrievability'`、`'24h 缓存'`、`'未接入'`、`'请用验证码登录'` 等）。owner/expires 待 TPM 复核：按 §10.2 这些文件的真实清零人是 T-07/T-08/T-10/T-11（service 抽取 + 文案走 shared/errors.ts）。",
+      "evidence": "TM_TASK=T-99 node tools/boundaries.mjs --copy --json → copy-legacy-zero 在 packages/server/src 的 37 处命中（拆分前由 legacy-web-copy 通配豁免）"
+    },
+
+    {
+      "id": "legacy-web-tailwind-config-colors",
+      "engine": "boundaries",
+      "assertion": "colors-no-hardcode",
+      "file": "^apps/web/tailwind\\.config\\.ts$",
+      "owner": "T-04",
+      "expires_after": "T-04",
+      "reason": "A-10 表第 2 行（tokens 色值散落 → T-04 单一源）：web 侧 tailwind 配置里的 30 处色值（:11-21 的 `#f5f3ff…#2e1065` 紫色阶 + :24-55 的 `hsl(var(--x))` 映射）。此文件在 §10.2 T-04 的 ✏️ 清单内，故按裁决给 T-04（T-04 的活就是把它换成 `packages/ui/src/tailwind-preset.ts`）。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/tailwind.config.ts:11..55 共 30 处"
+    },
+    {
+      "id": "legacy-web-charts-colors",
+      "engine": "boundaries",
+      "assertion": "colors-no-hardcode",
+      "file": "^apps/web/src/components/charts/(forgetting-bar|growth-line|heatmap|review-line)-chart\\.tsx$",
+      "owner": "T-05（heatmap-chart.tsx + growth-line-chart.tsx）/ T-15（forgetting-bar-chart.tsx + review-line-chart.tsx）",
+      "expires_after": "T-05",
+      "reason": "A-10 表第 2 行的'页面侧色值'半边：4 个图表组件里的 6 处 hex/rgba（含 heatmap-chart 的 `rgba(139, 92, 246, …)`）。**A-16 裁决改归属**：`heatmap-chart.tsx`/`growth-line-chart.tsx` → T-05（展示层抽进 @tm/ui/patterns/{Heatmap,GrowthLine}，抽出的组件必须走 token），`forgetting-bar-chart.tsx`/`review-line-chart.tsx` → T-15（完整报告图留在 Web，批次4 页面任务）。⚠ 待 TPM 复核：本条目是一条'规则 × 文件集'的合并登记，而 `expires_after` 只有一格、且 boundaries 的命中粒度是'条目'级（tools/boundaries.mjs:filterExceptionHits 只比对 assertion+file+term），无法在同一条目内表达两个到期日；本轮按 A-10 既有的'取最早值、不宽于裁决'口径填 T-05，per-file 归属写进 owner。若要求两半各自到期，需把本条目按文件拆成两条（A-16 未授权增删条目，故未做）。清零动作本身不变：见 §10.4 第 735 行的拆分线。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose（cursor=T-99）→ apps/web/src/components/charts/*.tsx 共 6 处"
+    },
+    {
+      "id": "legacy-web-globals-purple-retired",
+      "engine": "boundaries",
+      "assertion": "colors-purple-retired",
+      "file": "^apps/web/src/app/globals\\.css$",
+      "owner": "T-04",
+      "expires_after": "T-04",
+      "reason": "A-10 表第 2 行（tokens 色值散落 → T-04）：globals.css :13/:25/:36/:48 的 `--primary/--ring = 262 83% …`（UI §8.2-2 紫色退役 + §1.12 token 单一源）。§10.3 明示 globals.css 归 T-04 独占，T-04 交付 `packages/ui/src/styles/tokens.css` 后必须清零。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/app/globals.css:13,25,36,48"
+    },
+    {
+      "id": "legacy-web-tailwind-config-purple",
+      "engine": "boundaries",
+      "assertion": "colors-purple-retired",
+      "file": "^apps/web/tailwind\\.config\\.ts$",
+      "owner": "T-04",
+      "expires_after": "T-04",
+      "reason": "A-10 表第 2 行：同文件的 :16/:17 两条 `#8b5cf6`/`#7c3aed` —— UI §8.2-2 点名的退役品牌紫。清零人与落点同 `legacy-web-tailwind-config-colors`。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/tailwind.config.ts:16,17"
+    },
+    {
+      "id": "legacy-web-charts-purple",
+      "engine": "boundaries",
+      "assertion": "colors-purple-retired",
+      "file": "^apps/web/src/components/charts/(growth-line|review-line)-chart\\.tsx$",
+      "owner": "T-05（growth-line-chart.tsx）/ T-15（review-line-chart.tsx）",
+      "expires_after": "T-05",
+      "reason": "A-10 表第 2 行的页面侧半边：两个图表组件的 `stroke/fill=\"#8b5cf6\"`（2 处）。**A-16 裁决改归属**：`growth-line-chart.tsx` → T-05（与 patterns/GrowthLine 同批抽走），`review-line-chart.tsx` → T-15（报告页批次4）。到期日同 `legacy-web-charts-colors` 的说明：单条目只有一个 `expires_after`，本轮取两半里最早的 T-05（不宽于裁决），per-file 归属写进 owner；要按文件各自到期需拆条目，A-16 未授权增删条目故未做。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/components/charts/{growth-line,review-line}-chart.tsx:25"
+    },
+    {
+      "id": "legacy-web-assess-tw-palette",
+      "engine": "boundaries",
+      "assertion": "colors-tailwind-palette",
+      "file": "^apps/web/src/app/\\(user\\)/assess/page\\.tsx$",
+      "owner": "T-12",
+      "expires_after": "T-16",
+      "reason": "UI §8.2-4 语义类唯一：assess 页 6 处 Tailwind 原生调色板类（`text-green-600`、`border-red-500` 等）。同 `legacy-web-colors-report-charts` 通配按'规则 × 文件'拆出，rule/owner/expires_after 全部沿用（不新增豁免）；清零人是批次 3-4 的页面任务（裁决表第 3 行），不是 T-04。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/app/(user)/assess/page.tsx:192,274,275,281,282,343"
+    },
+    {
+      "id": "legacy-web-chat-tw-palette",
+      "engine": "boundaries",
+      "assertion": "colors-tailwind-palette",
+      "file": "^apps/web/src/app/\\(user\\)/chat/page\\.tsx$",
+      "owner": "T-12",
+      "expires_after": "T-16",
+      "reason": "同上：chat 页 :212 的 `border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300`（1 处，同时也是 `dark-variant-budget` 预算内的唯一一条 dark:）。拆分自 `legacy-web-colors-report-charts`，口径不变。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/app/(user)/chat/page.tsx:212"
+    },
+    {
+      "id": "legacy-web-report-tw-palette",
+      "engine": "boundaries",
+      "assertion": "colors-tailwind-palette",
+      "file": "^apps/web/src/app/\\(user\\)/report/page\\.tsx$",
+      "owner": "T-12",
+      "expires_after": "T-16",
+      "reason": "同上：report 页 :39-42 的 4 处 `border-*-500/50 bg-*-500/10`（洞察卡片的四色）。拆分自 `legacy-web-colors-report-charts`，口径不变。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/app/(user)/report/page.tsx:39,40,41,42"
+    },
+
+    {
+      "id": "legacy-web-ui-focus-badge",
+      "engine": "boundaries",
+      "assertion": "focus-ring-not-hidden",
+      "file": "^apps/web/src/components/ui/badge\\.tsx$",
+      "owner": "T-16",
+      "expires_after": "T-16",
+      "reason": "A-10 表第 3 行（焦点样式 / UI §8.2-6）：`focus-visible:outline-none` 系 shadcn 原件遗留，5 个 ui 原件逐文件登记（本条 = badge.tsx:6）。给 T-12/T-15/T-16 区间的最末位 T-16 是**不弱于裁决**的取法：实际上 §10.2 的 T-04 🗑️ 清单会在批次 1 删掉这 12 个原件（迁进 `packages/ui/src/primitives`），届时本条目变 stale 由脚本提示删除。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/components/ui/badge.tsx:6"
+    },
+    {
+      "id": "legacy-web-ui-focus-button",
+      "engine": "boundaries",
+      "assertion": "focus-ring-not-hidden",
+      "file": "^apps/web/src/components/ui/button\\.tsx$",
+      "owner": "T-16",
+      "expires_after": "T-16",
+      "reason": "同上（button.tsx:7 的 `focus-visible:outline-none focus-visible:ring-2`）。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/components/ui/button.tsx:7"
+    },
+    {
+      "id": "legacy-web-ui-focus-dialog",
+      "engine": "boundaries",
+      "assertion": "focus-ring-not-hidden",
+      "file": "^apps/web/src/components/ui/dialog\\.tsx$",
+      "owner": "T-16",
+      "expires_after": "T-16",
+      "reason": "同上（dialog.tsx:42 关闭按钮的 `focus:outline-none`）。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/components/ui/dialog.tsx:42"
+    },
+    {
+      "id": "legacy-web-ui-focus-input",
+      "engine": "boundaries",
+      "assertion": "focus-ring-not-hidden",
+      "file": "^apps/web/src/components/ui/input\\.tsx$",
+      "owner": "T-16",
+      "expires_after": "T-16",
+      "reason": "同上（input.tsx:10 的 `focus-visible:outline-none`）。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/components/ui/input.tsx:10"
+    },
+    {
+      "id": "legacy-web-ui-focus-textarea",
+      "engine": "boundaries",
+      "assertion": "focus-ring-not-hidden",
+      "file": "^apps/web/src/components/ui/textarea\\.tsx$",
+      "owner": "T-16",
+      "expires_after": "T-16",
+      "reason": "同上（textarea.tsx:9 的 `focus-visible:outline-none`）。",
+      "evidence": "node tools/boundaries.mjs --colors --verbose → apps/web/src/components/ui/textarea.tsx:9"
+    },
+
+    {
+      "id": "legacy-auth-route-login-compat",
+      "engine": "boundaries",
+      "assertion": "route-string-preserved",
+      "file": "^packages/server/src/routes/auth\\.ts$",
+      "term": "/api/auth/login",
+      "owner": "T-07",
+      "expires_after": "T-12",
+      "reason": "A-12：给 route-string-preserved 接上例外通道后暴露的存量命中（不是新豁免，规则一字未改）。§6.5-1 的旧路径清单要求 `/api/auth/login` 在册，但该路径在本仓库从未存在过 —— `packages/server/src/routes/auth.ts` 实注册的是 `/api/send-code`(:26)、`/api/login`(:54)、`/api/me`(:114)、`/api/password`(:127)，旧 APK 走的是无前缀的 `/api/login`。真正的清零动作 = T-08 的旧接口兼容层（`/api/auth/*` → 现实现）落地，§10.3 per_file 里 routes/auth.ts 归 T-07，故 owner 给 T-07。expires_after 取 A-10 表第 3 行（路由字面量 → T-12 / T-15 / T-16）里**最早**的那一个，不宽于裁决；到期即按'过期例外仍存在即红'重新判红。清单里其余 6 条路径实测在册，不在本条目内。",
+      "evidence": "node tools/boundaries.mjs --routes --json → hits[0] = { file: packages/server/src/routes/auth.ts, line: 54, term: /api/auth/login }（锚点行实文：r.post('/api/login', async (c) => {）"
+    },
+    {
+      "id": "legacy-auth-route-register-compat",
+      "engine": "boundaries",
+      "assertion": "route-string-preserved",
+      "file": "^packages/server/src/routes/auth\\.ts$",
+      "term": "/api/auth/register",
+      "owner": "T-07",
+      "expires_after": "T-12",
+      "reason": "A-12 同一批暴露的第二条：`/api/auth/register` 也从不存在（auth.ts 无 register 端点，注册走 `trpc/routers/auth.ts` 的密码注册 + `users` 激活路径，PRD R-23/R-39⑥）。锚点退到该模块内最先出现的 `/api/...` 字面量行（:26 `/api/send-code`），因为池内没有任何现存路径与 `register` 共有分段 —— 行号是脚本量出来的，不是猜的。清零动作同上（T-08 兼容层 / T-07 归属），expires_after 同上取 A-10 第 3 行最早值。",
+      "evidence": "node tools/boundaries.mjs --routes --json → hits[1] = { file: packages/server/src/routes/auth.ts, line: 26, term: /api/auth/register }（锚点行实文：r.post('/api/send-code', async (c) => {）"
+    }
+  ]
+}

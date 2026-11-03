@@ -1,0 +1,24 @@
+{
+  "$comment": "A-28-3 动作通道 fixture：delete-expired-entry 的判据只看 patch 里被删的那些行能不能拼回完整条目、条目自己的 expires_after 是否等于当前任务号，所以这份文件的行号不敏感，条目内容才是。",
+  "gate_cursor": "T-10",
+  "exceptions": [
+    {
+      "id": "fixture-entry-expires-T10",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^packages/fixture-a/",
+      "owner": "T-10",
+      "expires_after": "T-10",
+      "reason": "绿向样本：当前任务号 = T-10 时，整条删除合法。"
+    },
+    {
+      "id": "fixture-entry-expires-T07",
+      "engine": "boundaries",
+      "assertion": "copy-legacy-zero",
+      "file": "^packages/fixture-b/",
+      "owner": "T-07",
+      "expires_after": "T-07",
+      "reason": "红向样本：T-10 删它 = 删未到期条目（它早就该被 T-07 消掉，但不是 T-10 的权限）。"
+    }
+  ]
+}

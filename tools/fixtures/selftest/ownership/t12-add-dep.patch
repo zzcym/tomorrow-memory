@@ -1,0 +1,11 @@
+diff --git a/apps/web/package.json b/apps/web/package.json
+index 1111111..2222222 100644
+--- a/apps/web/package.json
++++ b/apps/web/package.json
+@@ -8,6 +8,7 @@
+   "dependencies": {
+     "next": "15.5.4",
++    "@tanstack/react-query": "5.90.2",
+     "react": "19.2.8",
+     "react-dom": "19.2.8"
+   },

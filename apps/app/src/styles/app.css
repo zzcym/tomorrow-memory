@@ -1,0 +1,35 @@
+/**
+ * App 宿主样式入口（架构 §3.4 / UI §1.12.1）。
+ *
+ * 本文件**不定义任何颜色**（判据：`tools/boundaries.mjs --colors` 的 `colors-no-hardcode`
+ * 扫 `apps/**`，hex / `rgb()` / `hsl()` 命中即红），只做两件事：
+ *  1. `@import` 唯一 token 源；
+ *  2. 挂 UI §1.12.3 为 `apps/app` 开的白名单覆写（下面的 4 条声明即全部，超出即返工）：
+ *     ① `-webkit-text-size-adjust`（横屏/字号缩放下不跳版，R-33 ②）、
+ *     ② 底部 tab 的安全区（§2.4 第 2 处：`env(safe-area-inset-bottom)` 只允许在四处出现）、
+ *     ③ `--tab-h` 刘海机覆写（§1.12.3 第 2 条 / UI §2.4 括注 56→64px）、
+ *     ④ `--dialog-max-h` 弹层上下留距各 24px（§1.12.3 第 4 条 / UI §3.11.2 的 4C）。
+ */
+
+@import '@tm/ui/styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ① 白名单：字号自适应锁定（两端一致，Web 侧在 globals.css 的同一条） */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ② 白名单：底部 tab 高度与安全区（§2.4 第 2 处的逐字实现）。
+   `--tab-h` 的取值仍来自 tokens.css 唯一源（尺度层两端禁止覆写）；刘海机需要的 64px 由
+   原生侧 `WindowInsets` 决定，本任务不在 CSS 里猜设备参数 —— 见报告"给 T-20 的接口需求"。 */
+.tm-tabbar {
+  height: calc(var(--tab-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ④ 白名单：App 侧弹层上下留距各 24px（UI §1.12.3 第 4 条 / §3.11.2 的 4C）。
+   读尺度 token 组合出一颗组件级上限，不是覆写 `--sp-*` 尺度层本身。 */
+:root { --dialog-max-h: calc(100vh - var(--sp-6) * 2); }

@@ -1,0 +1,66 @@
+<!doctype html>
+<!--
+  T-14（架构 §5.1 / §3.4）：本文件是打进 APK 的 `file:///android_asset/index.html`。
+  · 不写任何以 `/` 开头的引用（构建期由 vite.config.ts 的 dist-guard 扫描，判据①）；
+  · 首帧主题内联脚本 = 不 FOUC 的唯一手段（§3.4；真机判据在 T-22 的 A-17 那笔账里清）；
+  · WebView 过低时 JS 产物根本跑不起来 → 可读提示页只能写在这里（R-17⑦）。
+  源码里的 `/src/main.tsx` 是 Vite 的 dev 入口写法，构建产物会改写成 `./assets/…`（base:'./' + renderBuiltUrl）。
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <!-- R-33②：不得出现 user-scalable=no（允许缩放）；viewport-fit=cover 供 safe-area 使用 -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>明日记忆</title>
+    <script>
+      // ① 首帧主题：localStorage['tm:theme'] → <html class="dark">，在 CSS 之前执行。
+      //    键名与 @tm/ui 的 THEME_STORAGE_KEY 一致（那是同一份常量的字面镜像，两端共用）。
+      (function () {
+        try {
+          var mode = localStorage.getItem('tm:theme') || 'system';
+          var dark =
+            mode === 'dark' ||
+            (mode !== 'light' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.className += ' dark';
+        } catch (e) {
+          /* WebView 未开 DOMStorage（§5.6①）时按浅色走，不阻断首帧 */
+        }
+      })();
+    </script>
+    <script>
+      // ② 可读提示页（R-17⑦）：产物 target 是 chrome84，缺 ResizeObserver 说明 WebView 更旧，
+      //    此时连 ES module 都不会执行，所以提示必须留在内联脚本里。
+      (function () {
+        var supported =
+          typeof window.ResizeObserver !== 'undefined' &&
+          typeof window.Proxy !== 'undefined' &&
+          typeof window.Promise !== 'undefined';
+        if (supported) return;
+        document.addEventListener('DOMContentLoaded', function () {
+          var root = document.getElementById('app');
+          if (!root) return;
+          root.textContent = '';
+          var box = document.createElement('div');
+          box.setAttribute('style', 'padding:32px 20px;font-size:16px;line-height:1.6');
+          var title = document.createElement('p');
+          title.textContent = '系统浏览器版本过低';
+          var body = document.createElement('p');
+          body.textContent =
+            '请先把系统的 Android System WebView 升级到较新版本，再打开明日记忆。';
+          box.appendChild(title);
+          box.appendChild(body);
+          root.appendChild(box);
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,7 +1,13 @@
 /* 冒烟测试：验证新 Hono 服务与旧 Express API 的兼容性 */
 export {};
 
+// A-18-1：整段主体原样收进 main()（逻辑一字未改，只加护栏；为保持 diff 可读未重排缩进）
+import { httpTargetBanner, runWhenDirect } from './entry-guard.js';
+
+async function main(): Promise<void> {
+
 const BASE = 'http://localhost:3001';
+  console.log(httpTargetBanner('smoke-test', BASE));
 
 interface TestResult {
   name: string;
@@ -146,3 +152,7 @@ let token: string | undefined;
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n===== ${results.length - failed}/${results.length} 通过 =====`);
 process.exit(failed > 0 ? 1 : 0);
+}
+
+/** A-18-1：只有作为入口被直接执行时才跑（被 import = 零副作用）。 */
+runWhenDirect(main, 'Hono 服务冒烟', import.meta.url);

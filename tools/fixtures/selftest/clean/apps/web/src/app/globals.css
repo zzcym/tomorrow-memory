@@ -1,0 +1,28 @@
+@import '@tm/ui/styles/tokens.css';
+
+/* 全局样式入口：只允许引用 token，不允许颜色字面量（UI §8.2-1）。 */
+/* a11y-exception: R-22 —— 全站唯一一条强制声明挂在下述 reduced-motion 块内 */
+@layer base {
+  html {
+    color-scheme: light;
+    background: var(--surface);
+    color: var(--ink);
+  }
+  body {
+    font-family: var(--font-sans);
+    letter-spacing: 0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms;
+  }
+}

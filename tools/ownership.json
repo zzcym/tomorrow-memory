@@ -1,0 +1,1602 @@
+{
+  "$comment": "§10.3 共享冲突点归属表 + §10.4 跨批次交接表的机器可读落地件（T-02 产出）。消费方：tools/boundaries.mjs --check-ownership。owner=唯一归属任务号；readers=允许只读消费的任务（'*' 表示除 owner 外全部）。handoff 条目携带 predecessorAllowedDiff（先动任务允许的改动幅度）与 successorConstraint（后动任务的约束）。真相源：.delivery/02-tech-design.md §10.3/§10.4 + .delivery/04-adjudications.md A-4（apps/*/package.json、packages/ui/package.json 的细分以 A-4 为准，不照 §10.2 原文）。",
+  "source": {
+    "techDesign": ".delivery/02-tech-design.md#10.3,#10.4",
+    "adjudications": ".delivery/04-adjudications.md#A-4"
+  },
+  "tasks": {
+    "T-01": { "batch": 1, "title": "仓库与构建基线" },
+    "T-02": { "batch": 1, "title": "架构门禁与静态断言脚本" },
+    "T-03": { "batch": 1, "title": "@tm/shared 运行时契约与常量" },
+    "T-04": { "batch": 1, "title": "@tm/ui 底座 + token + Web 样式入口" },
+    "T-06": { "batch": 1, "title": "数据库层与迁移框架" },
+    "T-05": { "batch": 2, "title": "@tm/ui patterns" },
+    "T-08": { "batch": 2, "title": "tRPC router 按域拆分" },
+    "T-13": { "batch": 2, "title": "@tm/ui/auth 表单族" },
+    "T-14": { "batch": 2, "title": "apps/app Vite 工程 + 数据层 + 原生桥 + 导航壳" },
+    "T-07": { "batch": 3, "title": "凭据域后端" },
+    "T-09": { "batch": 3, "title": "词本域后端" },
+    "T-10": { "batch": 3, "title": "复习域后端" },
+    "T-11": { "batch": 3, "title": "profile/lookup/chat 后端" },
+    "T-12": { "batch": 3, "title": "Web 外壳与查词" },
+    "T-20": { "batch": 3, "title": "Android 原生壳与 APK 构建链" },
+    "T-15": { "batch": 4, "title": "Web 学习与词本" },
+    "T-16": { "batch": 4, "title": "Web 登录墙与凭据交互" },
+    "T-17": { "batch": 4, "title": "App 查词 + 词详情" },
+    "T-18": { "batch": 4, "title": "App 背词 + 词本 + 学情" },
+    "T-19": { "batch": 4, "title": "App 我的 + 账号 + 强制改密页" },
+    "T-21": { "batch": 4, "title": "发布护栏脚本" },
+    "T-22": { "batch": 5, "title": "CI/CD 接真实测试与 APK 产物" },
+    "T-23": { "batch": 5, "title": "端到端走查用例固化" },
+    "T-24": { "batch": 5, "title": "预发演练" },
+    "T-25": { "batch": 4, "title": "assessment_cache 属主列（M7，A-33-2 追认落批次4）" },
+    "T-18a": { "batch": 4, "title": "App 背词页 + 完成页（T-18 拆分 a 轮，出处 04-dev-report-T-18-a.md）" },
+    "T-18b": { "batch": 4, "title": "App 单词本一级页（T-18 拆分 b 轮）" },
+    "T-18c": { "batch": 4, "title": "App 轻学情页（T-18 拆分 c 轮，出处 04-dev-report-T-18-c.md）" },
+    "T-19a": { "batch": 4, "title": "App 登录态 store + token 桥（T-19 拆分 a 轮）" },
+    "T-19b": { "batch": 4, "title": "App 登录屏 + 登录域 queries（T-19 拆分 b 轮，A-44 #84 / A-50 #129）" },
+    "T-26a": { "batch": 4, "title": "学情分析 REST 门面（批次4 新任务，A-47 #106 / #107）" },
+    "T-26b": { "batch": 4, "title": "轻学情取数形状收口到 period 枚举（A-47 #106）" },
+    "T-19c": { "batch": 4, "title": "App 强制改密全屏 `#/upgrade-password`（T-19 拆分 c 轮，出处 04-dev-report-T-19-c.md；E4a2 件1 为名册校验补登）" },
+    "T-19d": { "batch": 4, "title": "App 账号安全屏 `#/security` 普通改密面（T-19 拆分 d 轮，出处 04-dev-report-T-19-d.md；E4a2 件1/件2 补登）" },
+    "T-19e": { "batch": 4, "title": "App「我的」屏 `#/me`（T-19 拆分 e 轮，出处 04-dev-report-T-19-e.md；A-74 #235 指定为本屏 spec 的 owner）" },
+    "T-19f": { "batch": 4, "title": "App「关于」屏 `#/me/about`（T-19 拆分 f 轮，出处 04-dev-report-T-19-f.md；E4a2 件1 补登）" },
+    "E2": { "batch": 3, "title": "批次3 出口轮 E2（伪任务号，先例 E1a/E1c/E3′：apps/web/playwright.config.ts 装配点 A-30-6）" },
+    "E5-register": { "batch": 5, "title": "批次5 首颗 E5-register（A-86 7C 真修注册落点：App 路由表加 `/register` + 登录屏 mode 改由路由驱动 + 三处「注册」次按钮改指新行 + `?mode=` 死参清理；A-103 派单，通道 13 颗精确条目）" }
+  },
+  "ownership": [
+    {
+      "path": "packages/ui/src/primitives/dialog.tsx",
+      "owner": "T-04",
+      "readers": [],
+      "reason": "A-91 预开（E4b7 件C）：`:74` 的 `max-h-dvh` 换成 `max-h-dialog`（同一颗上限的 token 化写法，常青内核下计算值逐字不变 ⇒ A-91 #354 的「Web 不动 = 计算值不变而非类串不变」），并就地改写 `:29` 那句提到 `max-h-dvh` 的注释（描述的实现随本轮消失，留着就是 N1 型过期注释）。本文件现由 `packages/ui/src/primitives/**`（T-04）与 `packages/ui/src/**`（T-04,T-05,T-13）两颗 glob 覆盖⇒ 按 F-41「只新建不重复登记」开精确条目，`matchOwnership`（`boundaries.mjs:1090-1106`）精确恒赢 glob。12 行",
+      "handoff": false,
+      "actions": ["bounded-edit:A-91-E4b7"],
+      "maxDiffLinesFor": { "E4b7": 12 }
+    },
+    {
+      "path": "apps/app/src/screens/LookupScreen.tsx",
+      "owner": "T-17",
+      "readers": [],
+      "reason": "A-89 预开（E4b4 件B 屏侧半件）：`:220-224` 的页内本地反向改引 shared 的 `flipLookupDirection`，并撤掉 `:213-218` 那段「刻意不走 `result-row.flippedDirection`」的注释（该注释描述的缺陷随本轮消失，留着就是 N1 型过期注释）。本文件现由 `apps/app/src/screens/**` 的 glob 覆盖（其 `per_file` 记 owner=T-17）⇒ 按 F-41「只新建不重复登记」开精确条目，`matchOwnership`（`boundaries.mjs:1090-1106`）精确恒赢 glob。16 行",
+      "handoff": false,
+      "actions": ["bounded-edit:A-89-E4b4"],
+      "maxDiffLinesFor": { "E4b4": 16 }
+    },
+    {
+      "path": "apps/app/src/screens/AboutScreen.tsx",
+      "owner": "T-19f",
+      "readers": [],
+      "reason": "A-88 预开（E4b6 件1）：`:45` 的 `ABOUT_GROUP_LABEL = SETTINGS_COPY.groups[4]` 改引专用键 `rows.about`（A-86 #320 的 5A：三处位置借键一次换完，值逐字不变、不许顺手改字）。本文件现由 `apps/app/src/screens/**`（owner T-14,T-17,T-18,T-19）的 glob 覆盖、无精确条目 ⇒ 按 F-41「只新建不重复登记」，且 `matchOwnership`（`boundaries.mjs:1090-1106`）精确恒赢 glob。8 行",
+      "handoff": false,
+      "actions": ["bounded-edit:A-88-E4b6"],
+      "maxDiffLinesFor": { "E4b6": 8 }
+    },
+    {
+      "path": "package.json",
+      "rootOnly": true,
+      "owner": "T-01",
+      "readers": "*",
+      "reason": "§10.3 第 1 行 + A-4：根 package.json 由 T-01 独占；其他任务需要脚本位 → 提给 TPM",
+      "handoff": false
+    },
+    {
+      "path": "pnpm-workspace.yaml",
+      "owner": "T-01",
+      "readers": "*",
+      "reason": "§10.3 第 2 行 + A-1（overrides 唯一真相在此）",
+      "handoff": false
+    },
+    {
+      "path": "tsconfig.base.json",
+      "owner": "T-01",
+      "readers": "*",
+      "reason": "§10.3 第 3 行：只 extend",
+      "handoff": false
+    },
+    {
+      "path": "eslint.config.js",
+      "owner": "T-01",
+      "readers": "*",
+      "reason": "§10.3 第 4 行",
+      "handoff": false
+    },
+    {
+      "path": ".gitignore",
+      "owner": "T-01",
+      "readers": "*",
+      "reason": "§10.3 第 4 行：APK 产物忽略项一次配齐。A-33-9 记录（出口轮 E1b 登记，**不改动 owner、不加动作通道**）：本文件的 `:38` `*.png` 误伤 5 个 `mobile-memory/res/mipmap-*/ic_launcher.png`，裁决把「改文本」这一动作派给 T-02/E1（`!mobile-memory/res/` + `!mobile-memory/res/**` + `mobile-memory/tmword-*.apk` / `.apk.idsig` 两条产物忽略），A-33-9 同时禁止任何 agent 做 `git add -f`（un-ignore 后仍由 TPM 在 Phase 8 入库）。⚠ 待 TPM 拍板：该授权目前没有对应的机检通道（owner 仍是 T-01），故 E1/E1b 改 `.gitignore` 在 `--check-ownership` 下仍报越界 = 裁决即授权、红保留（与 A-30-8 那次的处置同口径），不许为了变绿把 owner 改掉",
+      "handoff": false
+    },
+    {
+      "path": ".npmrc",
+      "owner": "T-01",
+      "readers": "*",
+      "reason": "T-01 判据① 新建件（§2 未单列，实际由 T-01 产出）",
+      "handoff": false
+    },
+    {
+      "path": "vitest.workspace.ts",
+      "owner": "T-01",
+      "readers": "*",
+      "reason": "T-01 判据：测试装配唯一登记处；后续任务只在包内放 spec，不改本文件",
+      "handoff": false
+    },
+    {
+      "path": ".github/workflows/**",
+      "owner": "T-22",
+      "readers": [],
+      "reason": "§10.3：T-20/T-21 只交付本地可执行脚本，不写 workflow",
+      "handoff": false
+    },
+    {
+      "path": ".dependency-cruiser.cjs",
+      "owner": "T-02",
+      "readers": "*",
+      "reason": "§2 目录树标注归属 T-02",
+      "handoff": false
+    },
+    {
+      "path": "tools/fixtures/depcruise/**",
+      "owner": "T-02",
+      "readers": "*",
+      "reason": "故意违规 fixture：路径必须与真实包同名（^packages/ui/ 等规则按真路径锚定），因此在真仓库里整棵排除在巡航之外；boundaries --self-test 会把它拷进临时目录再按真实路径跑",
+      "handoff": false
+    },
+    {
+      "path": "tools/**",
+      "owner": "T-02",
+      "readers": "*",
+      "reason": "§2 tools/ 四项均归 T-02；scripts/release/** 归 T-21（另有条目）",
+      "handoff": false
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "owner": "T-03",
+      "readers": "*",
+      "reason": "§10.3：只 import；新增契约由 T-03 统一 re-export",
+      "handoff": false
+    },
+    {
+      "path": "packages/shared/src/contracts/**",
+      "owner": "T-03",
+      "readers": "*",
+      "reason": "§10.3",
+      "handoff": false
+    },
+    {
+      "path": "packages/shared/src/contracts/wordbook.ts",
+      "owner": "T-03",
+      "readers": [],
+      "reason": "§10.2 T-03 行（contracts 全域）下的精确条目，为 A-85 的 E4b3 而立：R-15⑤/F-6 要求 `WordbookEntrySchema`（:19-29）增可选 `state`/`lapses`/`nextDue` 三键并**保持 `.passthrough()`**。⛔ 不许给 `wordbook.list` 加 output parser（A-83 #300：基线里它是 `input/output = null` + `(no-parser)` 探针，加校验会触发第三次 `trpc-shape` 再生，而 A-82-E4b 是一次性额度）。E4b3 用完即止，后续须另立裁决号（A-35-11 口径）",
+      "handoff": false,
+      "actions": ["bounded-edit:A-85-E4b3", "bounded-edit:A-87-E4b3b"],
+      "maxDiffLinesFor": { "E4b3": 16 , "E4b3b": 12 }
+    },
+    {
+      "path": "packages/shared/src/contracts/auth.ts",
+      "owner": "T-03",
+      "readers": ["T-07"],
+      "reason": "依据 A-36-6：DEFECT-3/4 同因修复一轮做完，owner = T-07 微轮，对本文件（shared 凭据契约）走动作通道 `bounded-edit:A-36-3` —— 登录面 `password` 摘掉 `PasswordSchema` 强度策略 + 两条入参校验的展示串具名常量与 `phoneSchema(message)` 工厂。⚠ 这是一次性**窄授权**，只覆盖 T-07 该轮的实际增量；文件归属仍是 T-03（上面的 `contracts/**` 条目一字未动），T-07 微轮交回后批次4 任何新任务须另出登记、不得复用本条（A-35-11 口径）。49 = 本轮该文件 agent 自证 scoped patch 的实测规模（`git diff --no-index -U0` 六个 hunk 头逐段相加 = 43 增 + 6 删，出处 `04-dev-report-T-07-fix3.md` §1-3；改后行号 64/79 两处由本轮 `04-dev-report-E1c.md` §4 与现文件逐字复核），**上限即取该最小可容纳值、不加余量**。证据口径（A-35-1③ / A-36-13）：`--diff-file` 必须是 agent 自证 scoped patch，不收 HEAD 相对 diff；本文件在 git 里是未跟踪状态（`git status --porcelain` = `??`），HEAD diff 按定义无输出，故只能按 scoped patch 判幅度。",
+      "handoff": true,
+      "actions": ["bounded-edit:A-36-3", "bounded-edit:A-82-E4b"],
+      "maxDiffLinesFor": { "T-07": 49, "E4b": 2 },
+      "_e4b_note": "E4b 件4（A-82 FU03⑥）：owner 仍是 T-03，本通道只覆盖本轮一处**注释**改动 —— `:25` 那句把易漂移的行号锚 `:3876` 换成符号名 `auth.sendCode`（先例 A-58 #160 / FU14），一个字节的代码/断言都不动。2 = agent 自证 scoped patch 实测规模（改前快照 cp → 现文件 `diff -u` = 1 增 + 1 删，唯一 hunk 在 :25；出处 `04-dev-report-E4b.md` 件4），上限即取该最小可容纳值、不加余量。⚠ 同路径既有条目按 F-41（boundaries.mjs:1627 取胜者 entries[0]）必须并入本条，不新建同路径第二条。E4b 用完即止，后续批次新任务须另立登记（A-35-11 口径）。"
+    },
+    {
+      "path": "packages/shared/src/constants/**",
+      "owner": "T-03",
+      "readers": "*",
+      "reason": "§10.3：文案/错误码/flag 默认值单一源",
+      "handoff": false
+    },
+    {
+      "path": "packages/shared/src/types.ts",
+      "owner": "T-03",
+      "readers": "*",
+      "reason": "§10.2 T-03 行 ✏️：只允许新增导出，不得删改既有类型名",
+      "handoff": false
+    },
+    {
+      "path": "packages/shared/src/utils.ts",
+      "owner": "T-03",
+      "readers": "*",
+      "reason": "§10.2 T-03 行 ✏️（连胜计算 C-11 单一实现）",
+      "handoff": false,
+      "actions": ["bounded-edit:A-89-E4b4"],
+      "maxDiffLinesFor": { "E4b4": 14 }
+    },
+    {
+      "path": "packages/shared/src/schema/**",
+      "owner": "T-06",
+      "readers": ["T-02", "T-21", "T-07", "T-09", "T-10", "T-11", "T-25"],
+      "reason": "§10.3：DDL 单一源，T-02 的 parity 脚本与 T-21 的审计脚本只读消费。§10.4 第 9 行交接（A-33-2 追认 T-25 落批次4、A-33-4 要求本轮把 owner 一次登记清楚）：唯一登记的后续改动人 = T-25，幅度封顶在 tables.ts 的 `assessmentCache.columns` 追加 `user_id` + `columnDdl()` 的新增可选参数（判据②），M1-M6 的描述与生成语句逐字节不变。**A-33-2 的时序硬门禁**：`T-06 微轮交回 db/**` < `T-25` —— T-06 未交回之前 T-25 对该路径只有只读面（readers），写权不得提前打开",
+      "handoff": true,
+      "actions": ["block-append:A-35-11"],
+      "blockAppendFor": {
+        "T-25": {
+          "blocks": ["assessmentCache", "columnDdl"],
+          "maxAppendLines": 15
+        }
+      },
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-06"] },
+      "successorConstraint": "T-25 的 diff 只允许在 `schema/tables.ts` 的 assessmentCache 描述块与 columnDdl() 的新增可选参数处**纯追加**（0 既有行变更，A-35-11 block-append:A-35-11）；M1-M6 生成语句逐字节不变。⚠ block-append 判据要求 0 既有行变更：T-25 的既有行改写（如扩展 columnDdl 的 opts 类型定义）须改为新增重载/新键的写法，而非修改既有行"
+    },
+    {
+      "path": "packages/server/src/db/**",
+      "owner": "T-06",
+      "readers": ["T-07", "T-09", "T-10", "T-11", "T-25"],
+      "reason": "§10.3：其他后端任务只调 AppDB 接口方法。§10.4 第 9 行交接（A-33-2 / A-33-4）：唯一登记的后续改动人 = T-25，幅度封顶在 `AssessmentDB` 三处方法（接口 `db/types.ts` + `sqlite.ts` 实现 + `pg.ts` 实现：签名加 `userId`、:112/:146 建表补列、读点加属主过滤、写点带上属主），其余读写点对 T-25 零 diff（判据③）。时序同 A-33-2：T-06 微轮未交回前 T-25 只有只读面",
+      "handoff": true,
+      "actions": ["block-append:A-35-11"],
+      "blockAppendFor": {
+        "T-25": {
+          "blocks": ["AssessmentDB", "SqliteAssessmentDB", "PostgresAssessmentDB"],
+          "maxAppendLines": 20
+        }
+      },
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-06"] },
+      "successorConstraint": "除 AssessmentDB/SqliteAssessmentDB/PostgresAssessmentDB 三处块内**纯追加**外零 diff（A-35-11 block-append）；`migrations/000-006` 见下一条精确条目的 zeroDiffFor；T-25 对既有方法签名的改动须改用新增重载/扩展选项对象的写法，以满足 0 既有行变更的 block-append 硬条件（A-35-11）"
+    },
+    {
+      "path": "packages/server/src/db/migrations/{000,001,002,003,004,005,006}-*.ts",
+      "owner": "T-06",
+      "readers": ["T-25"],
+      "reason": "§10.4 第 9 行判据①（A-33-2 追认）：已落地的 000-006 六个迁移文件对 T-25 **零 diff**，本期「只加不删」（R-24④ / PRD §6.1-1）。T-25 只新增 007（见 🆕条目），不就地追加语句、不 DROP/RENAME/回填（`assertMigrationDiscipline()` 与 `MIGRATION_FORBIDDEN` 同一口径）",
+      "handoff": true,
+      "zeroDiffFor": ["T-25"],
+      "successorConstraint": "T-25 对 000-006 六个文件零 diff；要改 = 新登记一行交接，禁止就地追加"
+    },
+    {
+      "path": "packages/server/src/db/migrations/007-assessment-cache-user-id.ts",
+      "owner": "T-25",
+      "readers": [],
+      "reason": "§10.4 第 8/9 行的两条 🆕owner 之一（落地约束④，A-33-4 指定由 T-02 出口轮按本表写入）：M7 = `ALTER TABLE assessment_cache ADD COLUMN user_id INTEGER DEFAULT NULL`（§6.1 M7 行），唯一一条语句、不加索引、不动 `UNIQUE (word,qtype)`、`down()` 只写 noDownReason。⚠ 简报里写的 `packages/server/migrations/…` 是简称，真实落点带 `src/db/`（§10.4 第 9 行与 §6.1 同口径）。**合入后转只读**：与 000-006 同规则，后续任务要改它 = 新登记一行交接",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/integration/assessment-isolation.spec.ts",
+      "owner": "T-25",
+      "readers": [],
+      "reason": "§10.4 第 8/9 行的两条 🆕owner 之二（落地约束④，A-33-4）：R-41 的双驱动 × 入口 × 属主隔离用例（§10.2 T-25 行判据①~⑩），命名与 `chat-isolation.spec.ts` 对齐（同一条「属主不确定即拒读、403 而非 500」口径）。**合入后转只读**，批次5 要加用例须新登记交接行",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/src/scripts/migrate.ts",
+      "owner": "T-06",
+      "readers": ["T-25"],
+      "reason": "§2 / §6.1 迁移执行框架。§10.4 第 9 行交接（A-33-2 / A-33-4）：T-25 只**顺序追加** m007 的 import 与 `ALL_MIGRATIONS` 注册（判据：既有条目一字不改、数组只增不改序），故本行登记为交接条目而非扩 owner。**A-37 §三-14 追加（登记动作 = T-25 开工首步，先例 A-36-3 由 owner 轮自加）**：`ALL_MIGRATIONS` 是单行数组 ⇒ block-append 的「0 既有行变更」在本文件物理无解（`boundaries.mjs` judgeBlockAppend 的注释自己写明「块只占一行时该条件恒不成立」），故按 A-37 选的 (a) 既有机制形给本条目**追加**一条 `bounded-edit:A-37-14`，`maxDiffLinesFor.T-25 = 11` = E1c 实测「展开单行数组 + 追加 m007」的 1 删 10 增，cap 取实测值不加码。⚠ 三条不松口：① 既有 `block-append:A-35-11` 通道一字未动（T-25 若走纯追加仍按 4 行封顶判）；② 本通道**只**授权「import 行 + ALL_MIGRATIONS 注册行」这一处形状变更，改任何既有条目的**顺序或内容** = 越界（原判据）；③ 一次性窄授权，T-25 之外的任务号不得复用（bounded-edit 的 `maxDiffLinesFor` 只给 T-25 声明了数字）",
+      "handoff": true,
+      "actions": ["block-append:A-35-11", "bounded-edit:A-37-14"],
+      "maxDiffLinesFor": { "T-25": 11 },
+      "blockAppendFor": {
+        "T-25": {
+          "blocks": ["ALL_MIGRATIONS"],
+          "maxAppendLines": 4
+        }
+      },
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-06"] },
+      "successorConstraint": "T-25 对该文件只允许在 ALL_MIGRATIONS 块内**纯追加** m007 的注册行（A-35-11 block-append，0 既有行变更）；⚠ 当前 ALL_MIGRATIONS 是单行数组 `[m000,...,m006]`，T-25 若需展开为多行再追加则展开步骤须走另一授权通道（批次4 开工前由 TPM 确认实现策略）；改动任何既有条目顺序 = 越界"
+    },
+    {
+      "path": "packages/server/src/config.ts",
+      "owner": "T-07",
+      "readers": "*",
+      "reason": "§10.3：env 与 flag 种子",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/src/middleware/**",
+      "owner": "T-07",
+      "readers": "*",
+      "reason": "§10.3：auth / password-gate",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/src/trpc/router.ts",
+      "owner": "T-08",
+      "readers": [],
+      "reason": "§10.3：T-08 建与删（批次2 删除旧 router.ts）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/src/trpc/routers/index.ts",
+      "owner": "T-08",
+      "readers": [],
+      "reason": "§10.3：routers/index.ts = T-08 独占",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/src/trpc/routers/wordbook.ts",
+      "owner": "T-09",
+      "readers": [],
+      "reason": "精确路径条目（E4a 件2 口径：per_file 是精确字典，本词本 router 现由 glob `{...,wordbook,...}.ts` 的 per_file 判给 T-09）。E4b 件1/件2（A-82）跨主改：owner 仍是 T-09，本通道只覆盖出口轮 E4b 对 `add` 一处 mutation 的两件收口 —— 件1 FU02①：入参上限 `max(100)` 收紧为 `max(WORD_MAX_LENGTH)`（值 64，import 自 `@tm/shared`，不写字面量；兑现 baseline-regenerate:A-37-E4 那条缺口，PUT(legacy) 65-100 档设计内放行不动，A-40 #51/#53）；件2 FU03④：在调 service 之前用 `wordbookRejectionBody()` 拒纯空格 400（不动 zod 形状、不新增字段，错误形状经 `trpc/init.ts` 唯一 errorFormatter 从 `cause.{tmCode,httpStatus}` 提升，照 review.ts 先例不自造第二套）。22 = agent 自证 scoped patch 实测规模（改前快照 cp → 现文件 `diff -u` = 19 增 + 3 删，三处 hunk：import 段 + `add` 上限一处 + mutation 体内纯空格守卫；出处 `04-dev-report-E4b.md` 件1/件2），上限即取该最小可容纳值、不加余量。形状变更（max 100→64）触发 trpc-shape 基线再生，另走 `packages/server/test/trpc-shape.{spec.ts,baseline.json}` 条目的 `baseline-regenerate:A-82-E4b` 通道。E4b 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b", "bounded-edit:A-85-E4b3"],
+      "maxDiffLinesFor": { "E4b": 22, "E4b3": 12 }
+    },
+    {
+      "path": "packages/server/src/trpc/routers/{auth,wordbook,review,checkin,dictionary,profile,agent,assessment,analyst,chat}.ts",
+      "owner": "T-07,T-08,T-09,T-10,T-11",
+      "readers": [],
+      "reason": "§10.3 逐文件归属（auth=T-07、wordbook=T-09、review+checkin=T-10、dictionary+profile=T-11、agent/assessment/analyst=T-08、chat=T-11）；由 per_file 展开，见下。assessment-parts.ts=T-08 出自 A-21（批准 assessment 域内二拆，两个文件都归 T-08 且各 ≤120 行）。⚠️ 待 TPM 复核：§10.2 T-08 行把这 10 个 routers 文件写成 🆕（批次2 由 T-08 建），§10.3 又把它们逐文件判给 T-07/09/10/11，A-20 只对 routers/auth.ts + index.ts 的建文件动作做过追认 → “建”与“拥有”的差集未闭合，本轮不自行选边。E4a 件2（per_file 实测语义，钉死于 --self-test 用例③）：per_file 是「精确路径字典」，owner 按 rel 逐文件查字典值；owner 逗号列表与字典键**没有**按序映射关系，只是「glob 命中但不在字典里」的文件的兜底 owner 集合（任一即过）——原串里的重复位（T-10,T-10 / T-11,T-11,T-11 / T-08,T-08,T-08）是按假想的按序映射硬凑的，E4a 已按真实语义去重，判定集合不变",
+      "handoff": false,
+      "per_file": {
+        "packages/server/src/trpc/routers/auth.ts": "T-07",
+        "packages/server/src/trpc/routers/wordbook.ts": "T-09",
+        "packages/server/src/trpc/routers/review.ts": "T-10",
+        "packages/server/src/trpc/routers/checkin.ts": "T-10",
+        "packages/server/src/trpc/routers/dictionary.ts": "T-11",
+        "packages/server/src/trpc/routers/profile.ts": "T-11",
+        "packages/server/src/trpc/routers/agent.ts": "T-08",
+        "packages/server/src/trpc/routers/assessment.ts": "T-08",
+        "packages/server/src/trpc/routers/assessment-parts.ts": "T-08",
+        "packages/server/src/trpc/routers/analyst.ts": "T-08",
+        "packages/server/src/trpc/routers/chat.ts": "T-11"
+      }
+    },
+    {
+      "path": "apps/web/src/app/globals.css",
+      "owner": "T-04",
+      "readers": [],
+      "reason": "§10.3：T-12/T-15/T-16 一律不改（样式需求走 token）",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/index.ts",
+      "owner": "T-04",
+      "readers": "*",
+      "reason": "§10.3 + §10.4 第 4 行：T-05/T-13 零 diff",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/styles/tokens.css",
+      "owner": "T-04",
+      "readers": "*",
+      "reason": "§3.4 / UI §1.12 token 单一源",
+      "handoff": false,
+      "actions": ["bounded-edit:A-91-E4b7"],
+      "maxDiffLinesFor": { "E4b7": 8 }
+    },
+    {
+      "path": "packages/ui/src/tailwind-preset.ts",
+      "owner": "T-04",
+      "readers": "*",
+      "reason": "§3.2 唯一 preset",
+      "handoff": false,
+      "actions": ["bounded-edit:A-91-E4b7"],
+      "maxDiffLinesFor": { "E4b7": 6 }
+    },
+    {
+      "path": "packages/ui/package.json",
+      "owner": "T-04",
+      "readers": ["T-05", "T-13"],
+      "reason": "A-4：T-04 建基线；T-05/T-13 只能新增自身依赖行，不得改既有版本",
+      "handoff": true,
+      "predecessorAllowedDiff": {
+        "kind": "add-dependency-lines-only",
+        "applies_to": ["T-05", "T-13"],
+        "maxDiffLines": null
+      },
+      "successorConstraint": "T-05/T-13 对该文件的 diff 只允许 '+' 的 dependency 行，且不得删除/修改既有版本声明"
+    },
+    {
+      "path": "packages/ui/tsconfig.json",
+      "owner": "T-04",
+      "readers": ["T-05", "T-13"],
+      "reason": "§10.3 例外登记：T-01 建、归属改为 T-04",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/patterns/**",
+      "owner": "T-05",
+      "readers": ["T-04", "T-12", "T-15", "T-16"],
+      "reason": "§10.2 T-05 行",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/patterns/index.ts",
+      "owner": "T-05",
+      "readers": "*",
+      "reason": "§10.4 第 4 行：T-04 预置二级出口，之后归 T-05",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-04"] }
+    },
+    {
+      "path": "packages/ui/src/patterns/format.ts",
+      "owner": "T-05",
+      "readers": ["T-12", "T-15", "T-17", "T-18"],
+      "reason": "§10.2 T-05 可写清单原文只列 14 个 .tsx + README.md + 测试，未列本文件（T-05 报告 §8 偏差 D-3）；TPM 裁决补登记归 T-05。文案桶已落 @tm/shared（RELATIVE_TIME_COPY / PROGRESS_COPY），本文件只做组件侧格式化，不得自带第二份字面量",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/auth/**",
+      "owner": "T-13",
+      "readers": ["T-16", "T-19"],
+      "reason": "§10.2 T-13 行",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/auth/index.ts",
+      "owner": "T-13",
+      "readers": "*",
+      "reason": "§10.4 第 4 行",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-04"] }
+    },
+    {
+      "path": "apps/web/package.json",
+      "owner": "T-04",
+      "readers": ["T-12", "T-15", "T-16"],
+      "reason": "A-4：T-04 建基线；T-12/T-15/T-16 只允许新增 dependency 行。A-34-3 追加动作通道 `add-script-lines-only:A-34-3`：A-30-5 授权出口轮 E2 为该文件加 `test` 脚本行，但本条 reason 的「只许加依赖行」把它判成越界 → 按 A-34-3 走通道而不是改规则（机检实装在 E1a 名下，本条只是登记）",
+      "handoff": true,
+      "actions": ["add-script-lines-only:A-34-3"],
+      "predecessorAllowedDiff": {
+        "kind": "add-dependency-lines-only",
+        "applies_to": ["T-12", "T-15", "T-16"]
+      },
+      "successorConstraint": "只加不改删既有依赖"
+    },
+    {
+      "path": "apps/app/package.json",
+      "owner": "T-14",
+      "predecessorOwner": "T-01",
+      "readers": [],
+      "reason": "A-4：T-01 建，T-14 起为唯一 owner（批次2 之后 T-17/18/19 不得改）",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-01"] }
+    },
+    {
+      "path": "apps/app/tsconfig.json",
+      "owner": "T-14",
+      "predecessorOwner": "T-01",
+      "readers": [],
+      "reason": "§10.3 例外登记 + A-4：T-01 建，归 T-14",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-01"] }
+    },
+    {
+      "path": "apps/app/src/router.tsx",
+      "owner": "T-14",
+      "readers": ["T-17", "T-18", "T-19"],
+      "reason": "§10.4 第 5 行：三个 screen 任务对本文件零 diff",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-01"] },
+      "successorConstraint": "T-17/T-18/T-19 零 diff（只新增 screens/*）",
+      "zeroDiffFor": ["T-17", "T-18", "T-19"]
+    },
+    {
+      "path": "apps/app/src/shell/**",
+      "owner": "T-14",
+      "readers": ["T-17", "T-18", "T-19"],
+      "reason": "§10.4 第 5 行",
+      "handoff": true,
+      "zeroDiffFor": ["T-17", "T-18", "T-19"]
+    },
+    {
+      "path": "apps/app/src/data/**",
+      "owner": "T-14",
+      "readers": ["T-17", "T-18", "T-19"],
+      "reason": "§10.3 末段：T-17/18/19 只新增 screens/* 与 components/*",
+      "handoff": false,
+      "zeroDiffFor": ["T-17", "T-18", "T-19"]
+    },
+    {
+      "path": "apps/app/src/host.tsx",
+      "owner": "T-14",
+      "readers": "*",
+      "reason": "§10.3 末段",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/src/screens/**",
+      "owner": "T-14,T-17,T-18,T-19",
+      "readers": [],
+      "reason": "§10.3 末段 + §10.2 各批次4 行：懒加载占位归 T-14，真组件按 §5.3 逐页归 T-17/18/19。E4a 件2：批次4 实际交付按子轮拆分（A-44 #84 的 T-19 拆分先例同款），盘上 7 张已存在页面的字典值按各自文件头自署任务号收精（Study/Completion 头「—— T-18a」、Wordbook 头「—— T-18b」、Progress 头「—— T-18c」、Login 头「T-19b / A-44 #84 的 T-19 拆分」、Lookup/WordDetail 头「—— T-17」）；Me/Security/UpgradePassword/About 四件盘上未建，维持计划归属 T-19（建轮若是子轮，由该轮按文件头再收精）。per_file=精确路径字典，逗号串只兜字典外新文件（--self-test 用例③钉死语义）",
+      "handoff": false,
+      "per_file": {
+        "apps/app/src/screens/LookupScreen.tsx": "T-17",
+        "apps/app/src/screens/WordDetailScreen.tsx": "T-17",
+        "apps/app/src/screens/StudyScreen.tsx": "T-18a",
+        "apps/app/src/screens/CompletionScreen.tsx": "T-18a",
+        "apps/app/src/screens/WordbookScreen.tsx": "T-18b",
+        "apps/app/src/screens/ProgressScreen.tsx": "T-18c",
+        "apps/app/src/screens/MeScreen.tsx": "T-19",
+        "apps/app/src/screens/SecurityScreen.tsx": "T-19",
+        "apps/app/src/screens/LoginScreen.tsx": "T-19b",
+        "apps/app/src/screens/UpgradePasswordScreen.tsx": "T-19",
+        "apps/app/src/screens/AboutScreen.tsx": "T-19"
+      }
+    },
+    {
+      "path": "apps/app/{index.html,vite.config.ts,postcss.config.js,tailwind.config.ts}",
+      "owner": "T-14",
+      "readers": [],
+      "reason": "A-24-2：§10.2 T-14 可写清单里的 🆕apps/app/{vite.config.ts,index.html,postcss.config.js,tailwind.config.ts} 此前无条目（--check-ownership 报 no-entry）→ 补登记归 T-14。vite.config.ts 的改动授权另有 A-15（extensionAlias/js→ts 解析）与 A-22(b)（就地修 dist-guard 的类型分支）",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/src/main.tsx",
+      "owner": "T-14",
+      "readers": "*",
+      "reason": "A-24-2：§10.2 T-14 可写清单 🆕apps/app/src/{main.tsx,router.tsx,host.tsx} 三件里此前只登记了 router.tsx / host.tsx → 补 main.tsx 归 T-14",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/src/native/**",
+      "owner": "T-14",
+      "readers": ["T-17", "T-18", "T-19", "T-20"],
+      "reason": "A-24-2：§10.2 T-14 可写清单 🆕apps/app/src/native/{bridge.ts,speak.ts,launch-focus.ts} 此前无条目 → 归 T-14。T-20 只按 window.__app/__router 契约与 Java 侧对齐（只读消费），要改本目录得向 TPM 申请",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/src/styles/app.css",
+      "owner": "T-14",
+      "readers": ["T-17", "T-18", "T-19"],
+      "reason": "A-24-2：§10.2 T-14 可写清单 🆕apps/app/src/styles/app.css 此前无条目 → 归 T-14；token 单一源仍是 packages/ui/src/styles/tokens.css（T-04），本文件只放 App 侧骨架样式",
+      "handoff": false,
+      "actions": ["bounded-edit:A-91-E4b7"],
+      "maxDiffLinesFor": { "E4b7": 10 }
+    },
+    {
+      "path": "apps/app/test/{rest-fetcher,offline-queue,startup,router}.spec.{ts,tsx}",
+      "owner": "T-14",
+      "readers": [],
+      "reason": "A-24-2：§10.2 T-14 可写清单只列了 rest-fetcher/offline-queue 两份 spec，A-22 收口轮又产出 startup/router 两份 → 现状 4 份全部归 T-14。批次4 新增的页面测试不在此条目内（新文件按 no-entry 只登记不阻断，谁 owns 由 §10.2 各批次4 行决定）",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/app/layout.tsx",
+      "owner": "T-04",
+      "readers": ["T-16"],
+      "reason": "§10.4 第 2 行：T-16 仅新增 1 import + 1 包裹标签，diff ≤4 行",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-04"] },
+      "successorConstraint": "T-16 对该文件 diff 行数 ≤4；超出即拆新组件文件",
+      "maxDiffLinesFor": { "T-16": 4 }
+    },
+    {
+      "path": "apps/web/src/app/(user)/layout.tsx",
+      "owner": "T-12",
+      "readers": ["T-15", "T-16"],
+      "reason": "§10.4 第 3 行：唯一一次改动在 T-12；T-15/T-16 零 diff",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-12"] },
+      "zeroDiffFor": ["T-15", "T-16"]
+    },
+    {
+      "path": "apps/web/src/app/(user)/page.tsx",
+      "owner": "T-12",
+      "readers": ["T-04"],
+      "reason": "§10.4 第 1 行：批次1 T-04 只允许改 import 行；批次3 T-12 整页重写",
+      "handoff": true,
+      "predecessorAllowedDiff": {
+        "kind": "import-lines-only",
+        "applies_to": ["T-04"],
+        "maxDiffLines": null
+      }
+    },
+    {
+      "path": "apps/web/src/app/(user)/word/[word]/page.tsx",
+      "owner": "T-15",
+      "readers": ["T-04"],
+      "reason": "§10.4 第 1 行（T-04 只改 import 行）",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "import-lines-only", "applies_to": ["T-04"] }
+    },
+    {
+      "path": "apps/web/src/app/(user)/study/page.tsx",
+      "owner": "T-15",
+      "readers": ["T-04"],
+      "reason": "§10.4 第 1 行",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "import-lines-only", "applies_to": ["T-04"] }
+    },
+    {
+      "path": "apps/web/src/app/(user)/profile/page.tsx",
+      "owner": "T-15",
+      "readers": ["T-04", "T-11"],
+      "reason": "§10.4 第 1 行：本文件归 T-15（批次4 整页重写）。A-35-1③ 授权 T-11 微轮只改 92 行（`dailyGoal` → `daily_goal` 改读 canonical 键），走 bounded-edit:A-35-1 通道。⚠ T-15 批次4 重写本文件后本条作废/转只读（T-11 的微轮改动已被 T-15 整体实现取代）。证据口径（A-35-1③）：`--diff-file` 必须是 agent 自证 scoped patch，不收 HEAD 相对 diff（工作区他人未提交改动会混入 HEAD diff 导致误红）",
+      "handoff": true,
+      "actions": ["bounded-edit:A-35-1"],
+      "maxDiffLinesFor": { "T-11": 2 },
+      "predecessorAllowedDiff": { "kind": "import-lines-only", "applies_to": ["T-04"] }
+    },
+    {
+      "path": "apps/web/src/app/(user)/report/page.tsx",
+      "owner": "T-15",
+      "readers": ["T-04"],
+      "reason": "§10.4 第 1 行（本期只改 token → 由 T-04 的 import/token 范围内）",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "import-lines-only", "applies_to": ["T-04"] }
+    },
+    {
+      "path": "apps/web/src/app/(user)/chat/page.tsx",
+      "owner": "T-12",
+      "readers": ["T-04"],
+      "reason": "§10.4 第 1 行的 6 个现有页面之一",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "import-lines-only", "applies_to": ["T-04"] }
+    },
+    {
+      "path": "apps/web/src/app/(user)/assess/page.tsx",
+      "owner": "T-12",
+      "readers": ["T-04"],
+      "reason": "§10.4 第 1 行的 6 个现有页面之一。E4a2 件6（**封顶口径由行数改语义**，判定字段一字未动）：§10.4 第 8 行给批次4 T-25 登记本文件时把幅度写成「只新增 submit 未命中 `FORBIDDEN` → 重新出题一条分支（≤8 行 diff，不新增文案、不动其余渲染）」；A-38 §38 亲跑 `git diff --numstat` = 13 增/6 删后**裁决该口径改按语义行计** = **新增文案字符串字面量 0 条 + 新增分支 ≤8 行**，而 `@/components/ui/*` → `@tm/ui` 的 import 路径改写**不计入**那 8 行（理由逐字：那 5 行是「既有全局迁移的被动跟随，不是 T-25 新增功能面」，因为 `apps/web/src/components/ui/**` 已被 T-12 的 `packages/ui` 收口删除，仍写旧路径就编译失败）。机检落点同步更新 = `--check-ownership` 对 T-25 **只断言「无新文案字面量」、不断言行数**。⚠ 另记一条账面缺口（本轮 §D 只许改措辞，不动 owner）：§10.4 第 8 行的落地清单要求本文件登记成 owner=T-25 / maxDiffLines=8 的形状，盘上本条 owner 仍是建页方 T-12、`predecessorAllowedDiff` 只覆盖 T-04 的 import 行 ⇒ T-25 那半件授权在归属表里**从未落地**，补与不补留 TPM 裁（建议新账 F-42）",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "import-lines-only", "applies_to": ["T-04"] }
+    },
+    {
+      "path": "packages/server/src/app.ts",
+      "owner": "T-07",
+      "readers": ["T-08", "T-10"],
+      "reason": "§10.4 第 7 行：批次2 T-08 只允许改 `import { appRouter }` 的 1 行；批次3 起 T-10r3 按 A-33-7 授权改装配点（≤2 行），A-35-11 登记此通道使 T-10r3 那条红转绿。⚠ A-35-11：批次3 之后新任务须走新登记，不得复用本条目。E4a2 件5（只加账面注记，**判定字段一字未动**：`actions` 仍是 `bounded-edit:A-33-7`、`maxDiffLinesFor` 仍是 `{T-10:2}`、`predecessorAllowedDiff` 仍是 T-08 的 1 行 import）：账面事实 = `git diff --numstat -- packages/server/src/app.ts` 于 2026-09-21 20:27:53 实测 **142 插入 / 21 删除**（A-72/FU22 由 TPM 亲跑，本轮复跑同值）。这 142/21 是**未提交窗口内批次3+批次4 全部轮次打在一颗文件上的累积量，不是任何单轮的增量**，与本条目「单轮 ≤2 行」的封顶不构成矛盾、也**不得**被当成单轮授权来读。口径 = 批次5 的 E5-format 提交窗口前移后**逐轮对账**（⇒ 批次5 复算）。⛔ 明确禁止：为了让 `--check-ownership` 变绿而把 `maxDiffLinesFor` 开到 142 —— 那是把累积量冒充单轮幅度（A-19/A-35-10 的假绿形状）",
+      "handoff": true,
+      "actions": ["bounded-edit:A-33-7"],
+      "maxDiffLinesFor": { "T-10": 2 },
+      "predecessorAllowedDiff": {
+        "kind": "single-import-line",
+        "applies_to": ["T-08"],
+        "maxDiffLines": 1
+      },
+      "successorConstraint": "T-07 之后（批次3 起）非 owner 任务对本文件零 diff，除 A-33-7 授权的 T-10（≤2 行装配改动）"
+    },
+    {
+      "path": "packages/server/src/routes/**",
+      "owner": "T-07,T-09,T-10,T-11",
+      "readers": [],
+      "reason": "§10.2 批次3 各行：auth/version/admin-flags=T-07、wordbook=T-09、review/checkin=T-10、profile/avatar/lookup/tutor/chat/agent=T-11；routes/admin.ts=T-07。E4a 件1/件2：批次4 新件 routes/analyst.ts 补进字典（文件头原话「学情分析 REST 门面（A-47 #106 / #107 · T-26a · R-19 轻学情页 P0）」⇒ owner=T-26a）；per_file 为精确路径字典（--self-test 用例③钉死），逗号串只是字典外文件的兜底集合——补录后盘上 14 个 routes 文件已全部有精确位，兜底串不再被任何实际文件吃到",
+      "handoff": false,
+      "per_file": {
+        "packages/server/src/routes/auth.ts": "T-07",
+        "packages/server/src/routes/version.ts": "T-07",
+        "packages/server/src/routes/admin.ts": "T-07",
+        "packages/server/src/routes/admin-flags.ts": "T-07",
+        "packages/server/src/routes/wordbook.ts": "T-09",
+        "packages/server/src/routes/review.ts": "T-10",
+        "packages/server/src/routes/checkin.ts": "T-10",
+        "packages/server/src/routes/profile.ts": "T-11",
+        "packages/server/src/routes/avatar.ts": "T-11",
+        "packages/server/src/routes/lookup.ts": "T-11",
+        "packages/server/src/routes/tutor.ts": "T-11",
+        "packages/server/src/routes/chat.ts": "T-11",
+        "packages/server/src/routes/agent.ts": "T-11",
+        "packages/server/src/routes/analyst.ts": "T-26a"
+      }
+    },
+    {
+      "path": "mobile-memory/**",
+      "owner": "T-20",
+      "readers": ["T-14"],
+      "reason": "§10.3：Java/Manifest/res/构建脚本 + Caddyfile 归 T-20；T-14 只提供 dist 与两个 JS 入口名",
+      "handoff": false
+    },
+    {
+      "path": "mobile-memory/assets/**",
+      "owner": "T-20",
+      "readers": ["T-14"],
+      "reason": "§10.4 第 6 行：legacy 分支的 hotfix 与 main 上的删除不得交叉 cherry-pick",
+      "handoff": true,
+      "predecessorAllowedDiff": { "kind": "any", "applies_to": ["T-20"] }
+    },
+    {
+      "path": "Caddyfile",
+      "owner": "T-20",
+      "readers": [],
+      "reason": "§2 第 59 行：仅 CORS 白名单段，归属 T-20",
+      "handoff": false
+    },
+    {
+      "path": "scripts/release/**",
+      "owner": "T-21",
+      "readers": ["T-22"],
+      "reason": "§10.3：T-22 只在 workflow 里调用 pnpm release:snapshot",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/src/**",
+      "owner": "T-06,T-07,T-08,T-09,T-10,T-11",
+      "readers": [],
+      "reason": "§10.2 批次1/2/3 各 server 行的兜底：包内文件必须落在某个已登记的 owner 名下，无主文件按越界处理（--check-ownership 的 owner 表按目录登记）",
+      "handoff": false
+    },
+    {
+      "path": "packages/agent/src/**",
+      "owner": "T-08,T-11",
+      "readers": [],
+      "reason": "§10.2 批次2/3：graph=agent=T-08、tutor/lookup=profile 侧 T-11；其余按无主处理",
+      "handoff": false
+    },
+    {
+      "path": "packages/agent/src/deps.ts",
+      "owner": "T-08,T-11",
+      "readers": [],
+      "reason": "精确路径条目（A-94 E4c-ii 件1，比上面的 `packages/agent/src/**` 更具体 ⇒ 单胜者，不触发 F-41 并列）：本文件 `:17` 是全仓**第二份** `AnalysisPeriod` 声明（唯一声明点 = `packages/shared/src/types.ts:204`，值域逐字相同 `'7d'|'30d'|'90d'|'all'`；全仓引用点实测见 A-94 的哨兵清单，`src/**` 里除本行外只有 `index.ts:65` 的再导出）。本轮收成 `import type` + 转发，前例 = `apps/app/src/data/queries/analyst.ts:24,36`（T-03r2b 同形状改法，当时申报「调用点零改动」）。⛔ `index.ts` 的导出面一字不动 ⇒ 消费点无感。8 = 前例那颗转发块的最小可容纳规模（文档块 6 行 + `export type { … }` 1 行 + import 列表项 1 行 = +7/-1 = 8 行），超出即判红、不加余量。E4c-ii 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-94-E4c-ii"],
+      "maxDiffLinesFor": { "E4c-ii": 8 }
+    },
+    {
+      "path": "packages/agent/test/**",
+      "owner": "T-08,T-11",
+      "readers": [],
+      "reason": "E4c-ii 件2（A-94）：`packages/agent` 19 源文件 / 0 用例 —— 实测两证：`pnpm --filter @tm/agent test` 出口码 **1**（No test files found，include 为 `test/**` 与 `src/**` 下的 `*.spec.ts(x)`），而根 `pnpm test` 同一张装配表出口码 **0**（44 文件 / 1168 passed + 1 skipped，日志里 `@tm/agent` **0 次出现** ⇒ 空项目在多项目运行中被静默容忍）。处置 = **补真测**（⛔ `passWithNoTests`、⛔ 改脚本语义、⛔ `test.skip`/`test.fail`）。新增 spec 只许落本目录（⛔ 不许往 `src/**` 放，那里由上一条管）。取值可钉的纯函数面：`tools/fsrs.ts`（显式传 `now` 后确定）、`tools/assessment.ts` 的 `gradeAnswer`/`scoreToFsrsRating`/`fallbackQuestion`/`AssessmentQuestionSchema`、`nodes/orchestrator.ts` 的 `heuristicIntent`/`hasClearIntent`（⛔ 节点支：`:118` 的 `interrupt()` 在编译图外会抛）。200 = **单颗** spec 文件的 added+removed 封顶（计划 ≤4 颗；颗数与文件名由 TPM 亲读 scoped patch 核对，不在闸内）。硬判据：零网络 / 零 LLM / 零 DB / 零 Qdrant，⛔ import `src/scripts/**`，⛔ 读密钥类 `process.env`。E4c-ii 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-94-E4c-ii"],
+      "maxDiffLinesFor": { "E4c-ii": 200 }
+    },
+    {
+      "path": "packages/ui/src/**",
+      "owner": "T-04,T-05,T-13",
+      "readers": ["T-12", "T-15", "T-16", "T-17", "T-18", "T-19"],
+      "reason": "§10.3：ui 包按底座(T-04)/patterns(T-05)/auth(T-13) 三分，具体子目录另有更细条目",
+      "handoff": false
+    },
+    {
+      "path": "packages/shared/src/**",
+      "owner": "T-03",
+      "readers": "*",
+      "reason": "§10.3：shared 整包归 T-03（schema/ 子目录另有 T-06 条目）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/src/services/wordbook-service.ts",
+      "owner": "T-09",
+      "readers": [],
+      "reason": "§10.2 T-09 行（词本域）下的精确条目，为 A-85 的 E4b3 而立：`read(userId)`（:159 声明）要 join `AppDB.getCardsByUser`（`db/types.ts:310`）并用**已有**的 `cardFromJson`（`services/fsrs.ts:37`，⛔ 不许造第二份反序列化）投影出 `state`/`lapses`/`nextDue`。硬约束：**不许造数**、无卡片的词三键必须缺席而不是 0/假值、`gloss` 本期**不回传**（服务端无 dictionary 域，`queue-service.ts:13` 已写明）。E4b3 用完即止",
+      "handoff": false,
+      "actions": ["bounded-edit:A-85-E4b3", "bounded-edit:A-87-E4b3b"],
+      "maxDiffLinesFor": { "E4b3": 60 , "E4b3b": 36 }
+    },
+    {
+      "path": "packages/server/src/services/backup.ts",
+      "owner": "T-21",
+      "readers": [],
+      "reason": "§10.3 末行",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/src/services/**",
+      "owner": "T-07,T-09,T-10,T-11,T-08",
+      "readers": [],
+      "reason": "§10.2 批次3 各行：auth-service/password-policy/auth-policy/feature-flags/account-audit=T-07、wordbook-service+wordbook-merge=T-09、review-service/queue-service/checkin-service/fsrs=T-10、profile-service/avatar-service/lookup.ts/tutor.ts/search-history-service=T-11（本轮按 §10.2 原文补齐 per_file，使 T-10 的 fsrs.ts、T-09 的 wordbook-merge.ts 不再只靠粗 glob 放行）。⚠️ 待 TPM 复核两条：① 本条 owner 串里的 T-08 与 §10.2 T-08 行\"不得触碰 services/**\"+A-21\"不许把 helper 挪进 services/**\"矛盾；② 盘上存量 services/{analyst,cache,sms,redis,clickhouse,events,dict-sources,dictionaryapi,youdao}.ts 不在任何 §10.2 行里，现在被本条粗 owner 串整体放行 = RK-11 缺口",
+      "handoff": false,
+      "per_file": {
+        "packages/server/src/services/auth-service.ts": "T-07",
+        "packages/server/src/services/password-policy.ts": "T-07",
+        "packages/server/src/services/auth-policy.ts": "T-07",
+        "packages/server/src/services/feature-flags.ts": "T-07",
+        "packages/server/src/services/account-audit.ts": "T-07",
+        "packages/server/src/services/wordbook-service.ts": "T-09",
+        "packages/server/src/services/wordbook-merge.ts": "T-09",
+        "packages/server/src/services/review-service.ts": "T-10",
+        "packages/server/src/services/queue-service.ts": "T-10",
+        "packages/server/src/services/checkin-service.ts": "T-10",
+        "packages/server/src/services/fsrs.ts": "T-10",
+        "packages/server/src/services/profile-service.ts": "T-11",
+        "packages/server/src/services/avatar-service.ts": "T-11",
+        "packages/server/src/services/lookup.ts": "T-11",
+        "packages/server/src/services/lookup-service.ts": "T-11",
+        "packages/server/src/services/tutor.ts": "T-11",
+        "packages/server/src/services/search-history-service.ts": "T-11"
+      }
+    },
+    {
+      "path": "packages/server/src/trpc/init.ts",
+      "owner": "T-07",
+      "readers": ["T-09", "T-10", "T-11"],
+      "reason": "§10.2 T-07 行 ✏️trpc/init.ts + §10.2 T-08 行不得触碰列明写 \"trpc/init.ts（T-07 owner）\"。此前只被 packages/server/src/** 粗兜底条目覆盖（6 个任务都能过）→ 补精确条目",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/primitives/**",
+      "owner": "T-04",
+      "readers": ["T-05", "T-13", "T-12", "T-15", "T-16", "T-17", "T-18", "T-19"],
+      "reason": "§10.2 T-04 行 🆕primitives/{13 个}.tsx（迁入被删的 apps/web/src/components/ui/*）；T-05/T-13 行的不得触碰列均写 packages/ui/src/{primitives,...}（只消费）",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/host.tsx",
+      "owner": "T-04",
+      "readers": "*",
+      "reason": "§10.2 T-04 行 🆕packages/ui/src/host.tsx；T-05 行不得触碰列原文含 host.tsx",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/src/hooks/**",
+      "owner": "T-04",
+      "readers": "*",
+      "reason": "§10.2 T-04 行 🆕packages/ui/src/hooks/{use-theme-toggle,use-speak,use-recent-searches}.ts",
+      "handoff": false
+    },
+    {
+      "path": "packages/ui/test/{ui,patterns,auth}.spec.tsx",
+      "owner": "T-04,T-05,T-13",
+      "readers": [],
+      "reason": "§10.2 批次1/2 三行各写 1 份 spec：T-04 🆕test/ui.spec.tsx、T-05 🆕test/patterns.spec.tsx、T-13 🆕test/auth.spec.tsx。A-23#1 对 T-05 改 ui.spec.tsx 的越界**只做了一次性追认**，未改归属 → 本条仍按 §10.2 原文逐文件登记",
+      "handoff": false,
+      "actions": ["bounded-edit:A-91-E4b7"],
+      "per_file": {
+        "packages/ui/test/ui.spec.tsx": "T-04",
+        "packages/ui/test/patterns.spec.tsx": "T-05",
+        "packages/ui/test/auth.spec.tsx": "T-13"
+      },
+      "maxDiffLinesFor": { "E4b7": 24 }
+    },
+    {
+      "path": "packages/shared/test/**",
+      "owner": "T-03",
+      "readers": "*",
+      "reason": "§10.2 T-03 行 🆕packages/shared/test/contracts.spec.ts（含其 __snapshots__ 产物）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/db/**",
+      "owner": "T-06",
+      "readers": [],
+      "reason": "§10.2 T-06 行 🆕packages/server/test/db/migrations.spec.ts + §10.3 第 17 行（db/** = T-06）；盘上另有 T-06 收口轮产出的 methods.spec.ts",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/trpc-shape.{spec.ts,baseline.json}",
+      "owner": "T-08",
+      "readers": [],
+      "reason": "§10.2 T-08 行 🆕packages/server/test/trpc-shape.spec.ts（baseline.json 是该快照判据①的产物）；A-36 四-1 出口门禁 E3′ 开工前置 ⇒ F2 只登记一条窄授权、一次性动作通道，**基线本体由 E3′ 再生，F2 未碰一个字节**",
+      "handoff": false,
+      "actions": ["baseline-regenerate:A-36-E3", "baseline-regenerate:A-82-E4b"],
+      "baselineRegenerateFor": {
+        "E3": {
+          "outputs": ["packages/server/test/trpc-shape.baseline.json"],
+          "note": "A-36 四-1 + 四-2：批次3 收口门禁 E3′ 的**唯一一次** `TRPC_SHAPE_UPDATE=1` 再生额度。`--task E3`（出口轮伪任务号，先例 = E1a/E1c 对 apps/web/package.json 用 `--task E2` 走 add-script-lines-only:A-34-3）。窄性与机检 = tools/boundaries.mjs 的 judgeBaselineRegenerate 六条：只许写 outputs 清单内的生成物、必须交 agent 自证 scoped patch（改前快照 cp → 再生 → diff -u，**不收 HEAD diff**；基线在 git 里是未跟踪状态，HEAD diff 根本产不出它的账）、别的任务号（①）/无证据（②）/碰 spec 本体（④）/混入清单外文件（⑤）/0 行变更（⑥）全部判红，缺 outputs 拒判 exit 2（③）。红绿对照见 --self-test 通道⑦ 的 7 条用例。⚠ 一次性：本批次只有 E3′ 这一次（A-36 四-2 末段「auth.* 必须 0 行」的对照仍由 E3′ 执行）；批次4 的第二次再生须**另立裁决号**（A-36-#11 口径），不得复用 A-36-E3"
+        },
+        "E4b": {
+          "outputs": ["packages/server/test/trpc-shape.baseline.json"],
+          "note": "A-82 件1：批次4 出口轮 E4b（服务端词本面收口）的**第二次**基线再生额度。本条目 E3 那条 note 末尾预告过「批次4 的第二次再生须**另立裁决号**（A-36-#11 口径），不得复用 A-36-E3」⇒ 裁决号 = A-82、伪任务号 = E4b（先例 = E3/E1a/E1c 用出口轮伪任务号），产物清单与 E3 一字相同：**只准写** `trpc-shape.baseline.json`，`trpc-shape.spec.ts` 本体不许碰。窄性仍由 `judgeBaselineRegenerate` 六条机检：必须交 agent 自证 scoped patch（`cp` 改前快照 → `TRPC_SHAPE_UPDATE=1` 再生 → `diff -u` → 出口命令带 `--diff-file`，**不收 HEAD diff**，基线在 git 里是未跟踪状态）、别的任务号（①）/无证据（②）/碰 spec 本体（④）/混入清单外文件（⑤）/0 行变更（⑥）全部判红。⚠ 一次性：E4b 用完即止；E4c 若要第三次再生须再立裁决号，**不得**复用 A-82-E4b。"
+        }
+      }
+    },
+    {
+      "path": "packages/server/test/integration/{auth-register,auth-hardening}.spec.ts",
+      "owner": "T-07",
+      "readers": [],
+      "reason": "§10.2 T-07 行 🆕test/integration/{auth-register,auth-hardening}.spec.ts（判据① 要求双驱动各跑一遍）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/integration/auth-hardening.spec.ts",
+      "owner": "T-07",
+      "readers": [],
+      "reason": "精确路径条目（E4a 件2 口径：本文件现由上面的 glob `{auth-register,auth-hardening}.spec.ts` 判给 T-07；本轮另立精确条目，specificity 恒赢含通配条目 → `entries[0]` 取胜者此条，F-41 已核）。E4b 件4（A-82 FU03⑥）跨主改：owner 仍是 T-07，本通道只覆盖本轮一处**注释**改动 —— `:1096` 那句把易漂移的行号锚 `:3876`（sendCode）换成符号名 `auth.sendCode`（先例 A-58 #160 / FU14），一个字节的代码/断言都不动；同句 login 侧的 `baseline.json:3199` 是范围外锚点、原样留。2 = agent 自证 scoped patch 实测规模（改前快照 cp → 现文件 `diff -u` = 1 增 + 1 删，唯一 hunk 在 :1096；出处 `04-dev-report-E4b.md` 件4），上限即取该最小可容纳值、不加余量。E4b 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b"],
+      "maxDiffLinesFor": { "E4b": 2 }
+    },
+    {
+      "path": "packages/server/test/contract/legacy-apk.spec.ts",
+      "owner": "T-07",
+      "readers": ["T-09", "T-10"],
+      "reason": "§10.2 T-07 行 🆕；T-09 判据⑥ 与 T-10 判据⑧ 都要求 legacy-apk 快照不改 → 列为只读消费者，不许自行编辑",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/integration/wordbook-concurrency.spec.ts",
+      "owner": "T-09",
+      "readers": [],
+      "reason": "§10.2 T-09 行 🆕（判据①②③）；A-84 #305 追加 E4b5 窄通道：只允许把 :1219-1237 那颗『65 字符在 tRPC add 上是 200』的观测用例改判为 400/不入库（A-83 #297 的拍板已下），并同步 :1201/:1229-1233 的旧自述（『文件内联 .max(100)』已不成立）与撤标题里的『待拍板』。E4b5 用完即止，后续须另立裁决号（A-35-11 口径）",
+      "handoff": false,
+      "actions": ["bounded-edit:A-83-E4b5"],
+      "maxDiffLinesFor": { "E4b5": 40 }
+    },
+    {
+      "path": "packages/server/test/integration/wordbook-trpc-add.spec.ts",
+      "owner": "T-09",
+      "readers": [],
+      "reason": "A-84 #305 补录（E4b 于 A-82 件1/件2 新建、7 用例全绿）：钉 tRPC `add` 上限收紧为 `WORD_MAX_LENGTH`（64→放行、65→BAD_REQUEST/400）与纯空格词在 service 前拒成 400、与 REST push 同码同 body。E4b 报告 :162 已如实申报『归属表无条目（no-entry，不阻断）』，漏记是我的（A-83 未点名这颗新文件）。owner 按同域既有颗（wordbook-concurrency / wordbook-merge 均为 T-09）定，不发明新任务号",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/unit/wordbook-merge.spec.ts",
+      "owner": "T-09",
+      "readers": [],
+      "reason": "§10.2 T-09 行 🆕（merge/墓碑纯函数单测靶子）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/integration/review-parity.spec.ts",
+      "owner": "T-10",
+      "readers": [],
+      "reason": "§10.2 T-10 行 🆕（R-02② 双端逐字段一致）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/review-no-llm.spec.ts",
+      "owner": "T-10",
+      "readers": [],
+      "reason": "§10.2 T-10 行 🆕（判据② 运行时兜底）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/integration/{chat-isolation,profile-dto}.spec.ts",
+      "owner": "T-11",
+      "readers": [],
+      "reason": "§10.2 T-11 行 🆕test/integration/{chat-isolation,profile-dto}.spec.ts",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/{wordbook,review,profile}-standalone.spec.ts",
+      "owner": "T-09,T-10,T-11",
+      "readers": [],
+      "reason": "§10.3 第 15 行（app.ts 那一行）明示的并行安全机制：T-09/T-10/T-11 各自用 packages/server/test/<domain>-standalone.spec.ts 直接 new Hono().route() 自测，不依赖 app.ts → 按原文逐文件登记（出处是 §10.3 而非 §10.2 行）",
+      "handoff": false,
+      "per_file": {
+        "packages/server/test/wordbook-standalone.spec.ts": "T-09",
+        "packages/server/test/review-standalone.spec.ts": "T-10",
+        "packages/server/test/profile-standalone.spec.ts": "T-11"
+      }
+    },
+    {
+      "path": "packages/server/test/release/backup.spec.ts",
+      "owner": "T-21",
+      "readers": [],
+      "reason": "§10.2 T-21 行 🆕packages/server/test/release/backup.spec.ts",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/{tailwind.config.ts,next.config.ts}",
+      "owner": "T-04",
+      "readers": ["T-12", "T-15", "T-16"],
+      "reason": "§10.2 T-04 行 ✏️ 两件；next.config.ts 的 extensionAlias 改动由 A-15 授权（同属 T-04）",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/lib/host.tsx",
+      "owner": "T-04",
+      "readers": ["T-12"],
+      "reason": "§10.2 T-04 行 🆕apps/web/src/lib/host.tsx（盘上已存在）",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/components/charts/{heatmap,growth-line,forgetting-bar,review-line}-chart.tsx",
+      "owner": "T-05,T-05,T-15,T-15",
+      "readers": ["T-04"],
+      "reason": "A-16 裁决表逐文件归属（heatmap/growth-line 抽进 @tm/ui/patterns 时清色值 = T-05；forgetting-bar/review-line 留 Web = T-15）；T-04 把 4 个文件钉成集合相等的 spec 断言保留（新增第 5 个即红）",
+      "handoff": false,
+      "per_file": {
+        "apps/web/src/components/charts/heatmap-chart.tsx": "T-05",
+        "apps/web/src/components/charts/growth-line-chart.tsx": "T-05",
+        "apps/web/src/components/charts/forgetting-bar-chart.tsx": "T-15",
+        "apps/web/src/components/charts/review-line-chart.tsx": "T-15"
+      }
+    },
+    {
+      "path": "apps/web/src/components/home/**",
+      "owner": "T-12",
+      "readers": ["T-15", "T-16"],
+      "reason": "§10.2 T-12 行 🆕components/home/{search-section,result-section,decor-layer,footer-note}.tsx",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/components/{mobile-nav,header,word-lookup}.tsx",
+      "owner": "T-12",
+      "readers": ["T-15"],
+      "reason": "§10.2 T-12 行：🆕mobile-nav.tsx、✏️header.tsx、🗑️word-lookup.tsx；T-15/T-16 行的不得触碰列均写 components/{mobile-nav,header}.tsx",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/lib/{nav.ts,hooks/use-lookup.ts,api/lookup-stream.ts}",
+      "owner": "T-12",
+      "readers": ["T-15"],
+      "reason": "§10.2 T-12 行 🆕lib/{nav.ts,hooks/use-lookup.ts,api/lookup-stream.ts}；§10.3 第 11 行 + §10.2 T-15 行明示 T-15 的词本一级入口只往 nav.ts 的 NAV_ITEMS **提需求**，不改文件（读者权限仅到 §10.3 所述消费面）",
+      "handoff": false,
+      "actions": ["bounded-edit:A-89-E4b4"],
+      "maxDiffLinesFor": { "E4b4": 12 }
+    },
+    {
+      "path": "apps/web/src/app/(user)/{wordbook,profile/security}/page.tsx",
+      "owner": "T-15",
+      "readers": [],
+      "reason": "§10.2 T-15 行 🆕app/(user)/wordbook/page.tsx、🆕app/(user)/profile/security/page.tsx",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/components/{study,profile}/**",
+      "owner": "T-15",
+      "readers": ["T-12", "T-16"],
+      "reason": "§10.2 T-15 行 🆕components/{study/{queue-switch,card-view,session-summary}.tsx,profile/{checkin-card,stat-cards,goal-setting,avatar-setting,settings-list}.tsx}",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/components/{wordbook-sidebar,favorite-button,flashcard}.tsx",
+      "owner": "T-15",
+      "readers": [],
+      "reason": "§10.2 T-15 行：wordbook-sidebar.tsx(瘦身)、🆕favorite-button.tsx、🗑️flashcard.tsx（拆为 components/study/card-view.tsx + @tm/ui/patterns/Flashcard）；T-12 行的不得触碰列写 components/{...,wordbook-sidebar,flashcard}.tsx → 与本条一致",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/lib/api/{review,wordbook,profile}.ts",
+      "owner": "T-15",
+      "readers": [],
+      "reason": "§10.2 T-15 行 🆕lib/api/{review,wordbook,profile}.ts",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/lib/{use-auth,auth,trpc}.ts",
+      "owner": "T-16",
+      "readers": ["T-12", "T-15"],
+      "reason": "§10.2 T-16 行 ✏️lib/{use-auth,auth,trpc}.ts（盘上三件均存在）",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/components/{providers,login-dialog}.tsx",
+      "owner": "T-16",
+      "readers": [],
+      "reason": "§10.2 T-16 行 ✏️components/{providers,login-dialog}.tsx（后者变薄壳）；T-12/T-15 行的不得触碰列均写这两个文件",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/components/{auth-gate,upgrade-gate,login-wall}.tsx",
+      "owner": "T-16",
+      "readers": ["T-12", "T-15"],
+      "reason": "§10.2 T-16 行 🆕components/{auth-gate.tsx,upgrade-gate.tsx,login-wall.tsx}",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/app/upgrade-password/page.tsx",
+      "owner": "T-16",
+      "readers": [],
+      "reason": "§10.2 T-16 行 🆕app/upgrade-password/page.tsx（判据⑦ 不可关闭全屏页）",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/app/(user)/about/page.tsx",
+      "owner": "T-16",
+      "readers": [],
+      "reason": "§10.2 T-16 行 🆕app/(user)/about/page.tsx",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/src/lib/api/auth.ts",
+      "owner": "T-16",
+      "readers": [],
+      "reason": "§10.2 T-16 行 🆕lib/api/auth.ts",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/e2e/{home,study,wordbook,profile,auth-wall,upgrade}.spec.ts",
+      "owner": "T-12,T-15,T-15,T-15,T-16,T-16",
+      "readers": ["T-23"],
+      "reason": "§10.2 批次3/4 各行：T-12 🆕e2e/home.spec.ts、T-15 🆕e2e/{study,wordbook,profile}.spec.ts、T-16 🆕e2e/{auth-wall,upgrade}.spec.ts；T-23 只读复用（其行原文只给 e2e/** 新目录写权限，不改这些页面级 spec）",
+      "handoff": false,
+      "per_file": {
+        "apps/web/e2e/home.spec.ts": "T-12",
+        "apps/web/e2e/study.spec.ts": "T-15",
+        "apps/web/e2e/wordbook.spec.ts": "T-15",
+        "apps/web/e2e/profile.spec.ts": "T-15",
+        "apps/web/e2e/auth-wall.spec.ts": "T-16",
+        "apps/web/e2e/upgrade.spec.ts": "T-16"
+      }
+    },
+    {
+      "path": "apps/app/src/components/{result-row,ai-mnemonic-bar,goal-ask-sheet,due-badge-data}.tsx",
+      "owner": "T-17,T-17,T-18,T-18",
+      "readers": ["T-19"],
+      "reason": "§10.2 T-17 行 🆕components/{result-row,ai-mnemonic-bar}.tsx、T-18 行 🆕components/{goal-ask-sheet,due-badge-data}.tsx。§10.3 末段只写 \"T-17/T-18/T-19 只新增 screens/* 与 components/*\"，未点具体文件名 → 本条按 §10.2 原文逐文件登记；T-19 行的可写清单不含 components，故只给读者位",
+      "handoff": false,
+      "per_file": {
+        "apps/app/src/components/result-row.tsx": "T-17",
+        "apps/app/src/components/ai-mnemonic-bar.tsx": "T-17",
+        "apps/app/src/components/goal-ask-sheet.tsx": "T-18",
+        "apps/app/src/components/due-badge-data.tsx": "T-18"
+      }
+    },
+    {
+      "path": "apps/app/src/lib/{auth-store,token-bridge}.ts",
+      "owner": "T-19a",
+      "readers": ["T-17", "T-18"],
+      "reason": "§10.2 T-19 行 🆕apps/app/src/lib/{auth-store,token-bridge}.ts。E4a 件2：按两文件头自署收精到实际创建子轮 —— auth-store.ts 头原话「App 侧登录态的**单一真值源**（T-19a / 架构 §3.1、§5.2 第 2 条规矩、R-39⑧、R-40④、判据②⑧）」、token-bridge.ts 头原话「native/bridge.ts 的**薄封装**（T-19a / 架构 §5.6 第 2 行…）」；后续 T-19c/d 若要改这两件须新登记授权（A-35-11 口径），import 消费不受限",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/test/{lookup-screen,detail-screen,account}.spec.tsx",
+      "owner": "T-17,T-17,T-19",
+      "readers": [],
+      "reason": "§10.2 T-17 行 🆕test/{lookup-screen,detail-screen}.spec.tsx、T-19 行 🆕test/account.spec.tsx。§10.2 T-18 行未列任何 test 文件（其判据①~⑥ 全靠 build + pnpm --filter @tm/app test -- study wordbook progress 命中盘上既有 spec）→ T-18 要新增页面测试得向 TPM 申请，本轮不代它扩写",
+      "handoff": false,
+      "actions": ["bounded-edit:A-89-E4b4"],
+      "per_file": {
+        "apps/app/test/lookup-screen.spec.tsx": "T-17",
+        "apps/app/test/detail-screen.spec.tsx": "T-17",
+        "apps/app/test/account.spec.tsx": "T-19"
+      },
+      "maxDiffLinesFor": { "E4b4": 24 }
+    },
+    {
+      "path": "scripts/release/README.md",
+      "owner": "T-21",
+      "readers": [],
+      "reason": "§10.2 T-21 行 🆕scripts/release/README.md（已被 scripts/release/** 覆盖，登记为精确条目以便 owner 差异比对）",
+      "handoff": false
+    },
+    {
+      "path": "backups/{manifest.json,.gitkeep}",
+      "owner": "T-21",
+      "readers": ["T-24"],
+      "reason": "§10.2 T-21 行 🆕backups/manifest.json（运行时产物，仓库放 .gitkeep + schema 说明）。刻意只登记这两件、不给 backups/** 通配：判据② 产出的 pre-release-<tag>.db 是运行时落点且已被 .gitignore 忽略，T-24 通过调用 T-21 的脚本产生它，不该获得文件写权限",
+      "handoff": false
+    },
+    {
+      "path": ".github/actions/**",
+      "owner": "T-22",
+      "readers": [],
+      "reason": "§10.2 T-22 行 🆕.github/actions/*（如需）",
+      "handoff": false
+    },
+    {
+      "path": "web-static/**",
+      "owner": "T-22",
+      "readers": [],
+      "reason": "§10.2 T-22 行 🆕web-static/（下载页 + version.json）",
+      "handoff": false
+    },
+    {
+      "path": "e2e/**",
+      "owner": "T-23",
+      "readers": [],
+      "reason": "§10.2 T-23 行 🆕e2e/{web,app-cdp}/**、e2e/README.md、e2e/grep-copy.spec.mjs（仓库根 e2e/ 目录，与 apps/web/e2e/ 不是一处）",
+      "handoff": false
+    },
+    {
+      "path": ".delivery/release-report-*.md",
+      "owner": "T-24",
+      "readers": [],
+      "reason": "§10.2 T-24 行：不改代码，🆕.delivery/release-report-<date>.md。这是 .delivery/ 下唯一给开发的写位，其余 .delivery/** 正文任何任务都不许改",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/src/data/queries/auth.ts",
+      "owner": "T-19b",
+      "readers": ["T-19c", "T-19d"],
+      "reason": "E4a 件1（批次4 新件补录）：文件头原话「登录域数据层（T-19b / A-50 #129 授权面）：登录 / 注册 / 发码**三个 mutation 的 QueryOptions 工厂**的唯一落点」。必须登记为精确条目压过 apps/app/src/data/**（owner=T-14 且 zeroDiffFor T-17/18/19）——该文件是批次4 才出现的，留在粗条目下等于账面与盘面矛盾。readers 按头注「后续 T-19c/d（改密 / 强制改密 / 激活收尾）一律 import 这一份」登记为只读消费面",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/src/data/queries/analyst.ts",
+      "owner": "T-18c,T-26b",
+      "readers": [],
+      "reason": "E4a 件1（批次4 新件补录）：tab4 轻学情数据面。文件头未自署创建轮，只有改轮自署——头原话「本文件此前那套 days 入参照 #106 判为'对着不存在的契约写'，本轮（T-26b）改为 period」证明 T-26b 前有存量版本（该页数据面按页面归属推断为 T-18c 轮所建，见 components/progress-data.ts 头「—— T-18c」）。创建轮判断不了的部分不硬编：把两个都在文件头留了字的轮登记为 owner，收敛到单轮 ⚠️ 待 TPM 裁。同样必须精确压过 apps/app/src/data/** 粗条目",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/src/components/progress-data.ts",
+      "owner": "T-18c,T-26b",
+      "readers": [],
+      "reason": "E4a 件1：文件头原话「学习情况页（tab4，`screens/ProgressScreen.tsx`）的**纯投影层** + 宿主注入串 —— T-18c」；头亦自署「T-26b 只改了这里的**取数形状与注释**（投影算法一字未动）」→ 创建轮 T-18c 为主 owner，改轮 T-26b 是同文件留字的在册写方、并入 owner 集合（与 data/queries/analyst.ts 同口径，单点收敛 ⚠️ 待 TPM 裁）。落 §10.3 末段「批次4 只新增 screens/* 与 components/*」许可面",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/src/components/wordbook-toolbar.tsx",
+      "owner": "T-18b",
+      "readers": [],
+      "reason": "E4a 件1：文件头原话「词本工具条的两件控件（T-18b；UI §3.6.3 区 C/D + §3.6.7）」；头自述落点理由「packages/** 对本任务是禁区（§10.3）……落点因此只有两条：改 packages/ui（越界）或在 apps/app/src/components/ 下自建（§10.2 T-18 行明许可写清单）。本文件走后者」",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/test/study-screen.spec.tsx",
+      "owner": "T-18a",
+      "readers": [],
+      "reason": "E4a 件1：文件头原话「T-18a 判据自证（App 背词屏）—— apps/app/test/study-screen.spec.tsx」",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/test/completion-screen.spec.tsx",
+      "owner": "T-18a",
+      "readers": [],
+      "reason": "E4a 件1：文件头原话「T-18a 判据自证（App 背词完成页）—— apps/app/test/completion-screen.spec.tsx」",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/test/wordbook-screen.spec.tsx",
+      "owner": "T-18b",
+      "readers": [],
+      "reason": "E4a 件1：文件头原话「T-18b 判据自证（App 单词本一级页 `#/wordbook`）—— apps/app/test/wordbook-screen.spec.tsx」。既有 apps/app/test/{lookup-screen,detail-screen,account}.spec.tsx 条目的 reason 早预言过这一格：「批次4 新增的页面测试不在此条目内……谁 owns 由 §10.2 各批次4 行决定」→ 本轮按文件头决定",
+      "handoff": false,
+      "actions": ["bounded-edit:A-87-E4b3b"],
+      "maxDiffLinesFor": { "E4b3b": 60 }
+    },
+    {
+      "path": "apps/app/test/progress-screen.spec.tsx",
+      "owner": "T-18c",
+      "readers": [],
+      "reason": "E4a 件1：文件头原话「T-18c 判据自证（App 轻学情页 `#/progress`）—— apps/app/test/progress-screen.spec.tsx」",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/test/login-screen.spec.tsx",
+      "owner": "T-19b",
+      "readers": [],
+      "reason": "E4a 件1：文件头原话「T-19b 判据自证（App 登录屏 `#/login`）—— apps/app/test/login-screen.spec.tsx」。E4a2 收尾（TPM 补录）：件2 另建了一条同路径精确条目登记 T-19c/T-19d 两轮跨主改，实测读不到 —— `tools/boundaries.mjs:1627` 的 `const entry = entries[0]` 只取胜者一条、同路径多条不取并集，先写的本条恒赢 ⇒ 按 E4a2 报告件2 交 TPM 裁的 (a) 案，把 `{T-19c:11, T-19d:13}` 并入本条并删掉那条空壳。出处：① **T-19c** 净 +11，`04-dev-report-T-19-c.md` 交付清单原文「653 | 只动 B-02 一处(:370-375)：T-19b 留的哨兵 … 用例数不变」+ 起算 642（同报告 §④）；② **T-19d** 净 +13，`04-dev-report-T-19-d.md` §①「666 apps/app/test/login-screen.spec.tsx」+ §② 标题「peer 哨兵改判交底（`login-screen.spec.tsx:368-390`）」、正文自陈「净效果是门槛提高，不是放松」。⚠ 待证（A-74 #233①）：`apps/app/**` 未跟踪 ⇒ 11/13 是 `wc -l` 净行数而非 diff 的 added+removed，若按 diff 行口径须逐轮复核。单胜者语义本身记 **F-41**，归 E4c 的 boundaries 判定顺序修。",
+      "handoff": false,
+      "maxDiffLinesFor": { "T-19c": 11, "T-19d": 13 }
+    },
+    {
+      "path": "apps/app/test/auth-store.spec.ts",
+      "owner": "T-19a",
+      "readers": [],
+      "reason": "E4a 件1：文件头原话「T-19a 的地基用例（§10.2 T-19 行的判据②与判据⑧的可测面）」",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/integration/analyst-rest.spec.ts",
+      "owner": "T-26a",
+      "readers": [],
+      "reason": "E4a 件1（批次4 新件补录）：文件头原话「T-26a · 学情分析 REST 门面（GET /api/analyst / GET /api/analyst/dataset）的集成用例（A-47 #106 / #107，R-19 轻学情页 P0）」；比对方法照 T-11 profile-dto.spec.ts 的 standalone 口径（§10.3）。**合入后转只读**，后续要加用例须新登记交接行（007 迁移条目同规则）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/integration/profile-output-parser.spec.ts",
+      "owner": "T-11",
+      "readers": [],
+      "reason": "E4a 件1（批次3 微轮新件补录）：文件头原话「T-11 微轮 fix2 · **A-34-1②**：profile.get 挂上 output parser 之后的两类证据」→ owner=T-11（微轮产物沿用母任务号登记，maxDiffLinesFor/action 通道只对具体授权轮开，A-35-11 口径）",
+      "handoff": false
+    },
+    {
+      "path": "packages/server/test/release/manifest.spec.ts",
+      "owner": "T-21",
+      "readers": [],
+      "reason": "E4a 件1（批次4 新件补录）：文件头原话「T-21c-iii · N-4（A-47 #105）+ U-4（A-45 #91）—— scripts/release/restore-drill.mjs 的 manifest 台账面」→ T-21c-iii 是 T-21 的子轮，按母任务号登记（子轮号未进 tasks 名册的不发明）；A-84 #305 追加 E4b5 窄通道：只允许把 :162 `const entry = mine[0]` 在 `noUncheckedIndexedAccess` 下的三处 TS18048（:164/:167/:180）收窄，**不许动任何断言语义**（A-83 #298：存量、非 E4b 引入）。E4b5 用完即止",
+      "handoff": false,
+      "actions": ["bounded-edit:A-83-E4b5"],
+      "maxDiffLinesFor": { "E4b5": 8 }
+    },
+    {
+      "path": "apps/web/e2e/helpers.ts",
+      "owner": "T-15",
+      "readers": ["T-16", "T-23"],
+      "reason": "E4a 件1（批次4 新件补录）：文件头原话「T-15 第 2 轮 B 的共用打桩层（e2e）。**手法与 apps/web/e2e/auth-wall.spec.ts 的 mockTrpc() 完全一致**（A-30-6 定的全仓唯一装配点……）」——不在 apps/web/e2e/{home,study,...} 花括号条目的枚举面里，单独精确登记",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/e2e/home-redline.spec.ts",
+      "owner": "T-15",
+      "readers": ["T-23"],
+      "reason": "E4a 件1（批次4 新件补录）：文件头原话「T-15 判据面 ③：首页极简红线（R-07① / UI 规范 §8.3-C）**不破**」，且头自带硬约束「⛔ 本文件**只写断言，不碰 app/(user)/page.tsx**」",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/test/home-shell.spec.tsx",
+      "owner": "T-12",
+      "readers": ["T-15"],
+      "reason": "E4a 件1（批次3 新件补录）：文件头原话「T-12 首页外壳自门禁（vitest + jsdom）」——补 apps/web/e2e/home.spec.ts=T-12 同族在 vitest 侧的缺口",
+      "handoff": false
+    },
+    {
+      "path": "apps/web/playwright.config.ts",
+      "owner": "E2,T-22,T-23",
+      "readers": [],
+      "reason": "E4a 件1（批次3 出口轮新件补录）：文件头原话「A-30-6（批次3 出口轮 E2 建，T-22/T-23 接手维护）——**全仓唯一的 Playwright 装配点**」。建轮 E2 为出口轮伪任务号（先例：E1a/E1c 走 add-script-lines-only:A-34-3、E3′ 走 baseline-regenerate:A-36-E3），接手面按头注原样登记 T-22/T-23；除这三方外任何任务改本文件=越界",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/test/about-screen.spec.tsx",
+      "owner": "T-19f",
+      "readers": [],
+      "reason": "E4a2 件1（批次4 出口轮·归属补录）：文件头原话「T-19f 判据自证（App「关于」屏 `#/me/about`）—— `apps/app/test/about-screen.spec.tsx`。」⇒ 建轮 = T-19 拆分 f 轮，按本轮补进 `tasks` 名册的 T-19f 登记（先例 = 名册里 T-18a/T-18b/T-18c/T-19a/T-19b 五颗子轮号）。登记前本路径在归属表里是 no-entry（收尾报告件1 贴的改前原始输出：「归属表无条目（no-entry，不阻断）」= 门禁虚的），登记后由本条精确命中",
+      "handoff": false,
+      "actions": ["bounded-edit:A-88-E4b6"],
+      "maxDiffLinesFor": { "E4b6": 14 }
+    },
+    {
+      "path": "apps/app/test/me-screen.spec.tsx",
+      "owner": "T-19e",
+      "readers": [],
+      "reason": "E4a2 件1 + 件4：文件头原话「T-19e + T-19g-ii 判据自证（App「我的」屏 `#/me`）—— `apps/app/test/me-screen.spec.tsx`。」⇒ owner = **T-19e**（A-74 #235 指定「E4 先补登 owner = T-19e，再谈跨主通道」）。跨主通道：本文件被 T-19g-i/ii/iii/iv/v 连改五轮（头只自署到 T-19g-ii，iii/iv/v 无头署、账在各轮报告的 `wc -l` 前后），逐轮登记 `maxDiffLinesFor` 而**不走** `actions:[bounded-edit:…]` —— 实测理由：bounded-edit 的判据要求 agent 自证 scoped patch，无 `--diff-file` 时直接判「要证据」= 违规（本轮 `--task T-19g-i --files packages/shared/src/constants/copy.ts` 的正证即为此形状），而这五轮已交付、scoped patch 不再可得，幅度证据只剩各轮申报的 `wc -l`。各轮申报增量（**净行数**口径，不等于 diff 的 added+removed）：T-19g-i 884→913 = +29（`04-dev-report-T-19-g-i.md` ②-4，只动 A-06/A-07 两颗哨）/ T-19g-ii 913→1242 = +329（`04-dev-report-T-19-g-ii.md` §1 表）/ T-19g-iii 1242→1745 = +503（`04-dev-report-T-19-g-iii.md` §4「文件行数前后」）/ T-19g-iv 1745→1828 = +83（`04-dev-report-T-19-g-iv.md` 同名小节）/ T-19g-v 起 1828 → 盘面 **2059** = +231（`04-dev-report-T-19g-v.md` 只报用例数 59→65、**未报行数**）。⚠ 待证：以上「起始行数」全是下一轮报告的回抄值，`apps/app/**` 在 git 里未跟踪 ⇒ 无独立 diff 可核（A-74 #233 同口径），本轮只以 `wc -l` = **2059 行**钉终态（A-74 #233 的「凡 +N 行申报，起始数以它上一轮报告为准并标 待证」口径）。屏件 `apps/app/src/screens/MeScreen.tsx` 的 per_file 值仍是 T-19（计划归属），本轮一字未动｜A-99 #433 预开（E4d 件C 的判据面 = F-58 的出口判据本体）：本文件今天**主动禁止真号上 App 屏**（`:1958` 的 `expect(joined).not.toMatch(/赣ICP[0-9]/)` 挡的就是用户给的那颗真号，`:1955` 的 `toContain('XXXXXX')` 挡「占位段被动过」）⇒ 换号必然要**翻这些钉**，属改判不属补漏（A-98 #419）。逐颗清点：8 处断言/字面量翻转 = `:1184`/`:1237`/`:1921`/`:1972`/`:1988`/`:2022`（六颗占位号字面量钉换真号）+ `:1955`（翻为正面 `toContain('赣ICP备2026013161号-1')`）+ `:1958`（翻为 `toMatch(/赣ICP备2026013161号-1/)`）= 16 行；12 行 it/describe 标题与注释随事实改写 = `:33`、`:34`、`:86`、`:1221`、`:1918`、`:1920`、`:1942`、`:1944`、`:1956`、`:1959`（同行注释，断言本体不动）、`:1966`、`:1976`（含四处「企业法定公示」措辞随 A-98 #420 改）= 24 行；另 ≤12 容纳改写后行数净增与那颗真号正面钉。**一颗都不许删**：挡蜀串的 `:1957`、L-02 的三颗 `screenCode()` 反查钉 `:1945`/`:1946`/`:1947`、`:1959` 的 0 外链断言、`:789` 的 `BRAND.footerLine1` 正向引用钉全部原样保留；⛔ 改断言口径凑绿、⛔ 用 `vi.mock` 绕 BRAND 真值、⛔ `test.skip`/`test.fail` 遗留。52 = 16+24+12。E4d 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-88-E4b6", "bounded-edit:A-99-E4d"],
+      "maxDiffLinesFor": { "T-19g-i": 29, "T-19g-ii": 329, "T-19g-iii": 503, "T-19g-iv": 83, "T-19g-v": 231, "E4b2": 97 , "E4b6": 90, "E4d": 52 },
+      "_e4b2_note": "E4b2 件3（A-82 FU26① / F-29 真修）跨主改：owner 仍是 T-19e，本轮在 G 组改判一颗（G-04：旧钉 `statCardsAll()===0` + `buttons()===5` 把屏侧共门缺陷钉成期望值 ⇒ 翻为按格取源整表钉）+ 纯新增两颗（G-05 打卡在途未回 / G-06 档案在途未回而打卡已回），用例 65 → 67，**无一条只删不加**、『不假 0』下限原样保留。97 = agent 自证 scoped patch 实测规模（改前快照 → 现文件 `diff -u` = 92 增 + 5 删；出处 `04-dev-report-E4b2.md` 件3），上限即取该最小可容纳值、不加余量。⚠ 形状取舍：本条目沿用既有的**纯 `maxDiffLinesFor` 预算**形状、**不**加 `actions:[bounded-edit:…]` —— 理由是 E4a2 件4 在这颗 reason 里已交底的实测结论：`judgeBoundedEdit` 无 `--diff-file` 直接判「要证据」= 违规，给本条目补 actions 会让 T-19g-i…v 那五轮（scoped patch 已不可得）在账面变成不可判定；E4b2 自己的出口命令带 patch 走 `extra` 分支同样按实际 diff 判（97 ≤ 97 放行）。同路径不新建第二条（F-41：`boundaries.mjs:1627` 只取 `entries[0]`）。E4b2 用完即止。"
+    },
+    {
+      "path": "apps/app/test/security-screen.spec.tsx",
+      "owner": "T-19d",
+      "readers": [],
+      "reason": "E4a2 件1：文件头原话「T-19d 判据自证（App 账号安全屏 `#/security`，普通改密面）—— `apps/app/test/security-screen.spec.tsx`。」（该轮报告 §① 另附 `wc -l` 原始行 `996 apps/app/test/security-screen.spec.tsx`，与盘面同值）",
+      "handoff": false
+    },
+    {
+      "path": "apps/app/test/upgrade-screen.spec.tsx",
+      "owner": "T-19c",
+      "readers": [],
+      "reason": "E4a2 件1：文件头原话「T-19c 判据自证（App 强制改密全屏 `#/upgrade-password`）—— `apps/app/test/upgrade-screen.spec.tsx`。」",
+      "handoff": false
+    },
+    {
+      "path": "packages/shared/src/constants/copy.ts",
+      "owner": "T-03",
+      "readers": ["T-19g-i"],
+      "reason": "E4a2 件3（A-74 #235 授权入册的跨主改窄条目）：粗条目 `packages/shared/src/constants/**` 的 owner=T-03、readers 只给星号 只保证可读 ⇒ T-19g-i 写本文件是「越界但无人记账」状态。形状照 `packages/shared/src/contracts/auth.ts` 的先例（`actions:[bounded-edit:A-36-3]` + `maxDiffLinesFor`），裁决号 = A-74 #235。幅度：**+50**（该轮申报 862 → 912 行，新增 `SETTINGS_COPY` 的 `statCards`/`fetchFail`/`guestGuide` 三块，`04-dev-report-T-19-g-i.md` ②-1）。⚠ 待证：起始 862 行无独立记录可核（`packages/shared/**` 未跟踪，A-74 #233①），本轮只钉终态 —— 该轮申报 912，盘面 `wc -l` 实测 **919**，差的 7 行 = A-74 #237① 记的**TPM 本人**在派 T-19g-ii 前把 `CHECKIN_COPY.notDone.headline` 逐字上收（912 → 919），它不属任何 dev 轮、故不登记成任务号授权。T-19g-ii/iii/iv/v 对本目录 0 diff（ii 报告 §1 把 `packages/shared/**` 列进禁动清单并申报 0 diff；iv 报告 §3-1 以开工前 sha256 快照自证），所以本条只给 T-19g-i 一颗帽子｜A-98 #419 / A-99 #433 预开（E4d 件C 的串源半件 = F-58）：`:142` 的 `footerLine1` 从占位串 `冀ICP备2024XXXXXX号-1` 换成用户本人 2026-09-26 给的真号 `赣ICP备2026013161号-1`（原话在册 A-98 #415），与 `03-ui-spec.md:1465`（§6.4 定稿文案总表 = 权威面，A-98 #418 裁；那颗与 `:500` 的图示行由我在派单前自己改成真号，不占 agent 面）逐字同源。App「我的」页脚 `apps/app/src/screens/MeScreen.tsx:761` 直引这颗 ⇒ 换串即上屏，屏内 0 自造号（L-02 的 `screenCode()` 三颗反查钉 `/ICP|备案/`、`/[0-9]{6,}/`、`/beian|miit.gov.cn|<a /` 一字不动，因为真号来自 shared 不是屏，`stripComments` 之后的屏源码里仍 0 处 ICP）。Web 侧 `footer-note.tsx` 不引这颗 ⇒ 渲染零变化。6 = 那一行改写（2）+ 容纳至多 2 行口径注释（真号出处/占位史）。E4d 用完即止。",
+      "handoff": true,
+      "actions": ["bounded-edit:A-74-235", "bounded-edit:A-88-E4b6", "bounded-edit:A-99-E4d"],
+      "maxDiffLinesFor": { "T-19g-i": 50 , "E4b6": 12, "E4d": 6 }
+    },
+    {
+      "path": "packages/shared/src/constants/limits.ts",
+      "owner": "T-03",
+      "readers": ["T-19g-i"],
+      "reason": "E4a2 件3（同 copy.ts 一颗，A-74 #235）：幅度 **+15**（申报 138 → 153 行，新增 4 条 `DAILY_GOAL_UI_*`，`04-dev-report-T-19-g-i.md` ②-2；既有 `DAILY_GOAL_DEFAULT/MIN/MAX` 一字未动）。⚠ 起始 138 待证（A-74 #233① 未跟踪无记录）；终态本轮 `wc -l` = **153** 与申报逐字相符 ⇒ 这颗可钉死",
+      "handoff": true,
+      "actions": ["bounded-edit:A-74-235"],
+      "maxDiffLinesFor": { "T-19g-i": 15 }
+    },
+    {
+      "path": "packages/shared/test/contracts.spec.ts",
+      "owner": "T-03",
+      "readers": ["T-19g-i"],
+      "reason": "E4a2 件3（同 copy.ts，A-74 #235）：`packages/shared/test/**` 在册 owner=T-03、readers 只给星号 同样只保证可读 ⇒ 跨主改补窄条目。**刻意不给 `packages/shared/test/**` 整目录开面**，只点到被真改的这一颗文件。幅度 **+162**（申报 1041 → 1203，新增 4 个 describe / 8 颗 it，既有 55 颗一字未改，`04-dev-report-T-19-g-i.md` ②-3；该轮正文写「+161」是算术滑点，A-74 #233② 已按 1041→1203 更正为 162，本条取 162）。⚠ 起始 1041 待证（A-74 #233①）；终态本轮 `wc -l` = **1203** 与申报逐字相符｜A-99 #425/#426/#433 预开（E4d 件A，两颗 TS 错 + 一颗永真哨）：`:1240` 的 `SHARED_SRC[key].match(...)` 少一颗 `!` ⇒ TS2532（同文件 `:489`/`:508` 的既有形状就是 `SHARED_SRC[key]!`）；`:1253` 的 `'g'` 被写在 `new RegExp(...)` 的右括号**外面** ⇒ 它成了 `String.prototype.match` 的第二参数（TS2554），而 `match` 只有一个形参、非全局匹配返回的数组 `length` 恒 ≤1 ⇒ `:1254` 的 `toBe(1)` 对「copy.ts 里该字面量声明了几份」这件事**永不红**（A-99 #426 据此作废 A-89 #337 的「shared 那颗新哨机检的正是这条」半句）。我 03:02:58 复算过现盘面：`copy.ts` 里 `外观`/`关于` 各恰 1 处（`:526`/`:527`），所以 `'g'` 移进构造子之后那颗哨**仍判绿**，它的必须红反证靠临时种第二份字面量出（判据在任务书里，含快照/还原/复算 sha 三步）。8 = 两行各改写（2+2）+ 容纳模板串与 flags 位置重排的净增 ≤4。E4d 用完即止。",
+      "handoff": true,
+      "actions": ["bounded-edit:A-74-235", "bounded-edit:A-85-E4b3", "bounded-edit:A-87-E4b3b", "bounded-edit:A-88-E4b6", "bounded-edit:A-89-E4b4", "bounded-edit:A-99-E4d"],
+      "maxDiffLinesFor": { "T-19g-i": 162, "E4b3": 28 , "E4b3b": 12 , "E4b6": 16 , "E4b4": 16, "E4d": 8 }
+    },
+    {
+      "path": "apps/app/src/shell/ScreenFallback.tsx",
+      "owner": "T-14",
+      "readers": [],
+      "reason": "精确路径条目（E4b2 件1 / A-82 FU24①）：本文件是 A-22 时代的『接线前路由占位』。批次4 出口轮实测 `router.tsx:44-54` 的 11 条 `load` 已全部指向 `./screens/*.js` ⇒ src 内 0 引用（`grep -rn ScreenFallback apps packages --include=*.ts*` 只剩 `router.spec.tsx:44/:87` 那颗永不可能为真的分叉），本轮把死码删除并把那颗分叉改成硬判据『11/11 必须是真屏』。owner 仍是 T-14（粗条目 `apps/app/src/shell/**` 的在册值），本通道只覆盖这一颗文件的删除动作、不给 shell 目录整体开面。42 = agent 自证 scoped patch 实测规模（改前快照 → 现值 = 0 增 + 42 删，唯一 hunk 覆盖整文件；出处 `04-dev-report-E4b2.md` 件1），上限即取该最小可容纳值、不加余量。⚠ 精确条目按 `ownershipSpecificity`（`boundaries.mjs` 的 exact 位：`*`/`{` 记 0）恒赢 `shell/**` 与 `{...}` brace 条目，不是 F-41 那种同路径空壳。E4b2 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b2"],
+      "maxDiffLinesFor": { "E4b2": 42 }
+    },
+    {
+      "path": "apps/app/test/router.spec.tsx",
+      "owner": "T-14",
+      "readers": [],
+      "reason": "精确路径条目（E4b2 件1 / A-82 FU24①）：本文件现由粗条目 `apps/app/test/{rest-fetcher,offline-queue,startup,router}.spec.{ts,tsx}`（owner=T-14）在册，那条同时兜着另外三份 spec ⇒ 把 E4b2 的帽子挂到那颗上等于给 startup/rest-fetcher 两份测试也开 61 行面，故按精确路径另立（exact=1 恒赢 brace 条目，先例 = E4b 件4 的 `packages/server/test/integration/auth-hardening.spec.ts`）。本轮改动全在 `expectRenderedScreen` 一颗助手 + 判据③-1 新增一颗 `it`（占位分叉改硬判据，用例 10 → 11）+ 撤 `:7/:76` 的自述注释；**路由表 11 条的语义、其余九颗用例的断言面一字未动**。61 = agent 自证 scoped patch 实测规模（+46 / -15；出处 `04-dev-report-E4b2.md` 件1），上限即取该最小可容纳值、不加余量。E4b2 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b2"],
+      "maxDiffLinesFor": { "E4b2": 61 }
+    },
+    {
+      "path": "apps/app/src/components/ai-mnemonic-bar.tsx",
+      "owner": "T-17",
+      "readers": [],
+      "reason": "精确路径条目（E4b2 件2 / A-82 FU24②）：本文件现由 `apps/app/src/components/{result-row,ai-mnemonic-bar,goal-ask-sheet,due-badge-data}.tsx`（owner 串 T-17,T-17,T-18,T-18）在册，那颗兜四份文件 ⇒ 按精确路径另立窄通道，不给 goal-ask-sheet / due-badge-data 开面。本轮只收一件事：`:33` 的 `export const LOGIN_PATH = '/login';` 是仓库里第二份 `/login` 字面量，删掉它、改引 `lib/auth-store.ts` 的 `LOGIN_ROUTE` 单点，`:124` 的 hash 写入跟着换名。⚠ 交底：这颗 `export const` 的消费面实测只有 `WordDetailScreen.tsx:53` 一处（`grep -rn LOGIN_PATH apps packages` 全仓 0 测试引它）⇒ 连同那一处一起改引 `LOGIN_ROUTE`，**没有**保留 `LOGIN_PATH` 兼容别名（保留别名 = 同一个路由在盘上仍有两颗名字，正是长出第三份字面量的土壤）。7 = agent 自证 scoped patch 实测规模（+3 / -4；出处 `04-dev-report-E4b2.md` 件2），上限即取该最小可容纳值、不加余量。E4b2 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b2"],
+      "maxDiffLinesFor": { "E4b2": 7 }
+    },
+    {
+      "path": "apps/app/src/components/result-row.tsx",
+      "owner": "T-17",
+      "readers": [],
+      "reason": "精确路径条目（E4b2 件2 / A-82 FU24②，与 `ai-mnemonic-bar.tsx` 同因不同颗，一条一 path 记账 = A-67 #187）：`:379` 的 `export const LOGIN_PATH = '/login';` 是第三份字面量，删除后 `loginHrefForFavorite()` 改引 `LOGIN_ROUTE`。消费面实测两处：`CompletionScreen.tsx:40`、`StudyScreen.tsx:77`（0 测试引这颗导出名）⇒ 一并改引单点。8 = agent 自证 scoped patch 实测规模（+4 / -4；出处 `04-dev-report-E4b2.md` 件2），上限即取该最小可容纳值、不加余量。E4b2 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b2", "bounded-edit:A-89-E4b4"],
+      "maxDiffLinesFor": { "E4b2": 8 , "E4b4": 10 }
+    },
+    {
+      "path": "apps/app/src/screens/MeScreen.tsx",
+      "owner": "T-19",
+      "readers": [],
+      "reason": "精确路径条目（E4b2 件3 / A-82 FU26① = F-29 真修）：本文件现由 `apps/app/src/screens/**` 的 `per_file` 判给 T-19（与本轮新建精确条目的 owner 值一致，不改归属），粗条目兜十张屏 ⇒ 按精确路径另立窄通道。本轮改的是 `:393` 那颗 `showCheckinRow = showGoal && checkin.data !== undefined`：它把 C 区三格与 D 区整行绑在同一颗门上 ⇒ `词本 N 词`（唯一源 `profileProgressOf(profile.data)`）会因为 `checkin/status` 挂掉一起消失，与 R-19②『三格常驻』相反。改后按格取源分别降级（`showCheckinData` 只 gate 连续格 + D 区整行，且带 `!fetchFailed` 守住 `:1001` 整页只一颗卡的下限）。⚠ 未做：屏内自造的 `SECURITY/ABOUT/WORDBOOK/PROGRESS/STUDY_ROUTE` 五颗常量本轮不改（`:648` 那颗 `ABOUT_ROUTE` 计数哨原样）；页脚门 `:726-735` 未碰。92 = agent 自证 scoped patch 实测规模（+57 / -35，含 C 区三格各自包条件支的整块重排；出处 `04-dev-report-E4b2.md` 件3），上限即取该最小可容纳值、不加余量。E4b2 用完即止。E4b6（A-88 登记、A-89 #337 出口判「6 颗在册文件无越界」）：22 行封顶覆盖 `:259`/`:261` 换键与 `:462` 的 `showFooter` 门（`04-adjudications.md:1043` 记下的是这两处盘面改动），用完即止。A-94 E4c-ii 件3 = **只改注释**通道（A-89 #339 的 N1 半件）：本文件五处注释仍是 6A 裁定前的旧事实（`:96-98` 说行标题取 `SETTINGS_COPY.groups` 第 2/4 格 —— 实际 `:259`/`:261` 已走 `rows.appearance`/`rows.about`；`:160-161`、`:400-401`、`:447-453`、`:485-486` 仍写「F-36 待裁 / 降级支不画 H 页脚」—— 实际 F-36 已由 A-86 #320 选项 6A 裁闭，`:462` 的 `showFooter = showSettingsSections || fetchFailed` 就是页脚穿透降级支）。40 = 五处 × 每处 ≤8 行注释的可容纳上限（A-92 #360 口径：added+removed 含裸 `+` 空行）。**窄性不靠这个数字**：闸只量幅度，「一字不碰代码」由 TPM 亲跑的注释分类器判（scoped patch 里本文件的每一条 +/- 行必须是注释或空行，出现任一代码行 ⇒ TPM 判红退回重做，⛔ 抬额度）。E4c-ii 用完即止。｜A-99 #433 预开（E4d 件C 的注释半件）= **只改注释**通道（形状照上面 E4c-ii 件3 那条，A-89 #339 的 N1 口径）：随 F-32 号本体闭（A-98 #415）与 F-58 落地，本文件 12 处注释行已成**反向事实** —— `:130`（逐字引用占位串）、`:136-139`（「⚠ 备案号是占位串…屏内不许改写成看起来像真号的东西」整段口径现已相反）、`:156`/`:162`/`:451`/`:460`/`:487`/`:758` 六处「备案号是**企业**法定公示」（用户明示主体是个人 ⇒ A-98 #420：**结论与行为一字不动，只改理由**）、`:757`（「备案号是占位串（F-32 已记发布前法务项）」）。32 = 12 行逐行改写（24）+ 容纳改写后行数净增 ≤8。**窄性不靠这个数字**：闸只量幅度，「一字不碰代码」由 TPM 亲跑的注释分类器判（scoped patch 里本文件的每一条 +/- 必须是注释行或空行，出现任一代码行 ⇒ TPM 判红退回重做，⛔ 抬额度）。渲染面 `:761` 的 `BRAND.footerLine1` 一字不动。E4d 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b2", "bounded-edit:A-88-E4b6", "bounded-edit:A-94-E4c-ii", "bounded-edit:A-99-E4d"],
+      "maxDiffLinesFor": { "E4b2": 92 , "E4b6": 22 , "E4c-ii": 40, "E4d": 32 }
+    },
+    {
+      "path": "apps/app/src/screens/StudyScreen.tsx",
+      "owner": "T-18a",
+      "readers": [],
+      "reason": "精确路径条目（E4b2 件2 / A-82 FU24② 的消费点）：`:77` 从 `components/result-row.js` 引的那颗 `LOGIN_PATH` 随件2 一并删除，`:618/:622` 两处 `navigate()` 改引 `lib/auth-store.ts` 的 `LOGIN_ROUTE` 单点。屏的业务逻辑、渲染支、其余 import 一字未动。per_file 在册值 = T-18a，本条同值、不改归属。7 = agent 自证 scoped patch 实测规模（+4 / -3；出处 `04-dev-report-E4b2.md` 件2），上限即取该最小可容纳值、不加余量。E4b2 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b2"],
+      "maxDiffLinesFor": { "E4b2": 7 }
+    },
+    {
+      "path": "apps/app/src/screens/CompletionScreen.tsx",
+      "owner": "T-18a",
+      "readers": [],
+      "reason": "精确路径条目（E4b2 件2 / A-82 FU24② 的消费点）：`:40` 整行 import 由 `components/result-row.js` 的 `LOGIN_PATH` 换成 `lib/auth-store.js` 的 `LOGIN_ROUTE`，`:186` 一处 `navigate()` 跟着换名；per_file 在册值 = T-18a，本条同值。5 = agent 自证 scoped patch 实测规模（+3 / -2；出处 `04-dev-report-E4b2.md` 件2），上限即取该最小可容纳值、不加余量。E4b2 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b2"],
+      "maxDiffLinesFor": { "E4b2": 5 }
+    },
+    {
+      "path": "apps/app/src/screens/WordDetailScreen.tsx",
+      "owner": "T-17",
+      "readers": [],
+      "reason": "精确路径条目（E4b2 件2 / A-82 FU24② 的消费点）：`:53` 的 `import { LOGIN_PATH, useMnemonicBar }` 拆开（只留 `useMnemonicBar`），`:189/:229` 两处 `navigate()` 改引 `LOGIN_ROUTE`；per_file 在册值 = T-17，本条同值。8 = agent 自证 scoped patch 实测规模（+5 / -3；出处 `04-dev-report-E4b2.md` 件2），上限即取该最小可容纳值、不加余量。E4b2 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-82-E4b2"],
+      "maxDiffLinesFor": { "E4b2": 8 }
+    },
+    {
+      "path": "packages/server/src/routes/wordbook.ts",
+      "owner": "T-09",
+      "readers": [],
+      "reason": "A-87 预开（E4b3b 件A）：`packages/server/src/routes/**`（index 64）是 owner=T-07/09/10/11 的目录兜底、无动作通道 ⇒ 按 F-41 与 149-152 先例**新建精确条目**（精确恒赢 glob）。R-15⑤ 的 REST 半件：`GET /api/wordbook` 加 `?with_progress=1`，**缺省不带键**（`test/contract/legacy-apk.spec.ts:487-503` 的 §6.2-1 快照与 `wordbook-concurrency.spec.ts:891/:1189` 的 ALLOWED_KEYS 红线都在禁改面，默认响应必须逐字节不变）。幅度上限 24 行",
+      "handoff": false,
+      "actions": ["bounded-edit:A-87-E4b3b"],
+      "maxDiffLinesFor": { "E4b3b": 24 }
+    },
+    {
+      "path": "packages/server/test/integration/wordbook-progress-keys.spec.ts",
+      "owner": "T-09",
+      "readers": [],
+      "reason": "A-87 补录：E4b3 新建的取证用例（E4b3 轮 self-declare `no-entry`，按 A-84 #302 由 TPM 落笔补条目）。五条判据（有卡三键齐 / 无卡整键缺席 / 脏存量被真值覆盖 / REST 三面形状探针 / tRPC list 点亮）在册；E4b3b 件A 追加判据⑥（REST `?with_progress=1` 带键、缺省不带）预留 80 行",
+      "handoff": false,
+      "actions": ["bounded-edit:A-87-E4b3b"],
+      "maxDiffLinesFor": { "E4b3b": 80 }
+    },
+    {
+      "path": "apps/app/src/data/queries/wordbook.ts",
+      "owner": "T-14",
+      "readers": [],
+      "reason": "A-87 预开（E4b3b 件B）：`apps/app/src/data/**`（index 46）目录兜底无通道 ⇒ 新建精确条目。App 取数只有这颗走 REST `GET /api/wordbook`（`:129`），要带 `with_progress=1` 才拿得到进度三键；幅度上限 24 行",
+      "handoff": false,
+      "actions": ["bounded-edit:A-87-E4b3b"],
+      "maxDiffLinesFor": { "E4b3b": 24 }
+    },
+    {
+      "path": "apps/app/src/screens/WordbookScreen.tsx",
+      "owner": "T-18b",
+      "readers": [],
+      "reason": "A-87 预开（E4b3b 件C）：`apps/app/src/screens/**`（index 48）无通道 ⇒ 新建精确条目。只改 `stageOf` 的**键到位分支**三档映射（A-87 #320：`state===2 且 nextDue-now≥7d` ⇒ 已掌握；`state===2` 短间隔 ⇒ 在背；`state===3` Relearning ⇒ 在背），降级分支（无 `state`）逐字不动，幅度上限 20 行",
+      "handoff": false,
+      "actions": ["bounded-edit:A-87-E4b3b"],
+      "maxDiffLinesFor": { "E4b3b": 20 }
+    },
+    {
+      "path": "apps/web/src/lib/api/wordbook.ts",
+      "owner": "T-15",
+      "readers": [],
+      "reason": "A-87 预开（E4b3b 件C 的 Web 半件）：`apps/web/src/lib/api/{review,wordbook,profile}.ts`（index 104）是三文件枚举条目、开面会连带放行另两颗 ⇒ 新建精确条目。`stageOf`（`:149`）与 App 同套规则同批改，降级分支不动，幅度上限 20 行",
+      "handoff": false,
+      "actions": ["bounded-edit:A-87-E4b3b"],
+      "maxDiffLinesFor": { "E4b3b": 20 }
+    },
+    {
+      "path": "packages/agent/tsconfig.json",
+      "owner": "T-08",
+      "readers": [],
+      "reason": "精确路径条目（A-99 #430 子目① = F-56① / A-99 #433 的 E4d 件B）：`:6` 的 include 数组里那颗 `test` 使 `pnpm --filter @tm/agent build` 把 3 颗 spec（453 行）一起 emit 进 `packages/agent/dist`（A-95 #399 的盘面事实）。修法只有一处 = 从 `include` 去掉 `test`；⛔ 新建 `tsconfig.build.json`、⛔ 改 `packages/agent/package.json` 的 build/typecheck 脚本语义（A-99 #430 已把它划进「不做的动作」：那是行为变更，且本窗口不清 agent dist）。**owner 取 T-08 是我 TPM 现在裁的，不是为了给 no-entry 清零硬编**：E4a 那条「包根 package.json·tsconfig·Dockerfile 不在 §10.2 任何任务行里 ⇒ 保留 no-entry、列给 TPM 裁」把裁决权交给我，而本轮是「要授权一次具体改动」，无条目 = 无人记账（A-74 #235 立窄条目就是为了这个）；同包在册 owner = `packages/agent/src/**` 的 T-08,T-11，取该包构建面的 T-08。⚠ **我登记这条时新发现的代价（新立 F-61）**：本文件被 `build` 与 `typecheck` 共用（`packages/agent/package.json:14-15` 实测 `build = tsc -p tsconfig.json`、`typecheck = tsc -p tsconfig.json --noEmit`）⇒ 去掉 `test` 后 3 颗 spec 退出 typecheck 覆盖面。出口判据因此要求 agent **先**在含 `test` 的现状下实测 `@tm/agent typecheck` = 0 错（留 log 作 F-61 起点），改后再测仍 0 错 + `@tm/agent test` 仍 3 files/39 tests + 根 unit 合计不减；且 ⛔ 跑真 build（会写 `packages/agent/dist`，那颗在 A-96 锚点面上），复算产出一律 `--outDir` 指到系统临时目录。2 = 一行数组改写（+1/-1），⛔ 在本文件加注释行（JSONC 能写，但那是第二条 diff 面）。E4d 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-99-E4d"],
+      "maxDiffLinesFor": { "E4d": 2 }
+    },
+    {
+      "path": "apps/web/src/components/home/footer-note.tsx",
+      "owner": "T-12",
+      "readers": [],
+      "reason": "精确路径条目（A-100 把件C 的**连带注释面**补进 E4d，不在 A-99 #433 的三件清单里，是我这轮实测出来的）：本文件现由 `apps/web/src/components/home/**`（owner=T-12）的 glob 覆盖 ⇒ 按 F-41 先例（同 `packages/ui/src/primitives/dialog.tsx`、`apps/app/src/screens/LookupScreen.tsx` 那两条）开精确窄条目，`matchOwnership` 精确恒赢 glob。**改的只有文件头注释 `:5-6` 两行**：那两行逐字写着「不用 `BRAND.footerLine1` 里的占位串 `冀ICP备2024XXXXXX号-1`」，而件C 正是要让这颗占位串从盘上消失（`copy.ts:142` 换真号）⇒ 它随本轮变成**过期注释**（N1 型），是我这轮自己造的账，按 A-99 #428 的 F-60 同族口径当轮收掉，不留给出口报告。**代码一行不动**：`:13` 的 `ICP_NUMBER` 已是用户给的真号（A-98 #416 实测本文件 sha 前 12 位 `946ec1928310` 逐字未变）、`:14`/`:21` 的工信部外链保持原样（A-98 #421② 还没向用户取到答复 ⇒ ⛔ 在这里顺手加/删外链，也 ⛔ 把它抄进 App 侧）。6 = 两行改写（4）+ ≤2 容纳。窄性由 TPM 亲跑的注释分类器判（出现任一代码行 ⇒ 判红退回），⛔ 抬额度。E4d 用完即止。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-99-E4d"],
+      "maxDiffLinesFor": { "E4d": 6 }
+    },
+    {
+      "path": "apps/app/src/lib/auth-store.ts",
+      "owner": "T-19a",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 `:48` 是 `/login` 字面量的单点（`LOGIN_ROUTE`，A-82 FU24② 上收）。本颗加同形的一颗 `REGISTER_ROUTE = '/register'` 紧挨其后 ⇒ 新路由名有单点、屏侧不许再写第二份字面量（grep 哨）。本文件现由 `apps/app/src/lib/{auth-store,token-bridge}.ts`（owner=T-19a，brace 条目，`ownershipSpecificity` 的 exact 位 = 0）覆盖 ⇒ 按 F-41 先例开**精确**窄条目（`matchOwnership` 精确恒赢 brace）。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 10 }
+    },
+    {
+      "path": "apps/app/src/router.tsx",
+      "owner": "T-14",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 `:44-55` 的 `ROUTES` 现 11 条（`/login` 在 `:53`、`kind: 'gate'`）。本颗只加第 12 条 `{ path: REGISTER_ROUTE, kind: 'gate', load: () => import('./screens/LoginScreen.js') }` 与就近注释；⛔ 改 hash/`query` 解析、⛔ 动 `ROUTE_ALIASES`、⛔ 动 `TAB_PATHS`/`GATE_UPGRADE_PATH`。⚠ 同路径先写条目上的 `zeroDiffFor: [T-17,T-18,T-19]` 不针对 `E5-register`（那三颗是批次4 的屏任务，本颗是批次5 的路由任务）⇒ 同档并列取并集（F-41 修好的语义，`pickOwnership`），判定顺序先读 `actions`（A-40 #50b 钉子在册）。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 10 }
+    },
+    {
+      "path": "apps/app/src/screens/LoginScreen.tsx",
+      "owner": "T-19b",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 病灶本体：`:83` 的 `useState<AuthFormMode>('sign-in')` 是**纯内部 state**，全文件 0 处读 `useLocation()` ⇒ 任何 URL 都进不了注册态（`MeScreen.tsx:150-151` 自陈的「已知降级」正是这颗）。本颗 = `mode` 的**初值由当前路由派生**（`/register` ⇒ `'register'`，其余 ⇒ `'sign-in'`）；屏内 `changeMode`（`:159`）的本地切换与 `activate` 联动一寸不动。⛔ 读 `?mode=` 查询参数当来源（那是本轮要清掉的死参形状，不是新契约）；⛔ 动 `settleSession`/`gotoUpgrade`/`leaveTo` 的凭据与跳转语义（R-40④ / R-16②）。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 24 }
+    },
+    {
+      "path": "apps/app/src/screens/MeScreen.tsx",
+      "owner": "T-19",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 B 区访客引导条（`:15-16` 声明两颗按钮，串取 `SETTINGS_COPY.guestGuide.*` + `AUTH_COPY.submit.{login,register}`，shared `:604-605` 明令此处不抄第二份）：本颗只把**「注册」那颗的去向**从 `LOGIN_ROUTE` 改成 `REGISTER_ROUTE`。⛔ 动按钮串（`AUTH_COPY.submit.register` = `'注册'`，`copy.ts:664` 单点在册）、⛔ 动 F/H 拆门（`:445-452` 的 §3.8.5 `:998` 口径）、⛔ 动页脚。同路径先写的四条通道（E4b2/E4b6/E4c-ii/E4d）额度是历史实测值、不回改，本颗另开一条并列精确条目。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 16 }
+    },
+    {
+      "path": "apps/app/src/screens/StudyScreen.tsx",
+      "owner": "T-18a",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 `:619` 的 `navigate(`${LOGIN_ROUTE}?mode=sign-in&from=study`)` 与 `:623` 的 `?mode=register&from=study`：屏侧从不读 `mode` ⇒ 两颗 `mode=` 是**死参**（A-86 7C 明令同批清）。改法 = `:619` 去掉 `mode=sign-in`（默认即登录态）、`:623` 改指 `REGISTER_ROUTE` 并去掉 `mode=register`；`from=study` 保留原样（`intent=`/`word=` 家族另案转 F-62）。同路径先写条目 `bounded-edit:A-82-E4b2` 额度 7 已用完。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 10 }
+    },
+    {
+      "path": "apps/app/src/screens/WordbookScreen.tsx",
+      "owner": "T-18b",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 `:652` 一行上叠着**两颗病灶**：① `/login` 第二份字面量（FU24② 上收时漏掉这颗；其余已改引 `LOGIN_ROUTE` = `ai-mnemonic-bar.tsx:123`、`result-row.tsx:376`、`CompletionScreen.tsx:187`）；② `mode=` 死参。改法 = 按 `mode` 选 `LOGIN_ROUTE`/`REGISTER_ROUTE` 两颗常量之一，并删掉 `mode=` 查询段；`from=` 保留。同路径先写条目 `bounded-edit:A-87-E4b3b` 额度 20 已用完。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 12 }
+    },
+    {
+      "path": "apps/app/src/screens/CompletionScreen.tsx",
+      "owner": "T-18a",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 `:187` 的 `navigate(`${LOGIN_ROUTE}?mode=sign-in&from=study`)`：同 `StudyScreen:619` 那颗死参，去掉 `mode=sign-in`，`from=study` 保留。同路径先写条目 `bounded-edit:A-82-E4b2` 额度 5 已用完。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 8 }
+    },
+    {
+      "path": "apps/app/test/router.spec.tsx",
+      "owner": "T-14",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 路由表在册钉：`:114` `toHaveLength(11)`、`:116` 的 `path` 全等清单、`:146-160` 的 **FU24①「一条路由一张屏、11 条两两不同」**。本颗 = 严格重钉到 12 条：`REAL_SCREEN_DEFAULTS.size` 仍 = 11（⛔ 造第 12 张屏）；gate 两条（`/login` + `/register`）**允许且仅允许**共指 `LoginScreen`，其余 10 条仍两两不同；并**新增**一颗正向钉「`/register` 与 `/login` 同屏 ⇒ 屏侧 `mode` 只能由 `path` 派生」。⛔ 把「两两不同」整条删掉或改成 `>=` —— 口径是**换更强的钉，不是减钉**。同路径先写条目 `bounded-edit:A-82-E4b2` 额度 61 已用完。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 34 }
+    },
+    {
+      "path": "apps/app/test/login-screen.spec.tsx",
+      "owner": "T-19b",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 屏侧新增两颗钉：① 进 `#/register` ⇒ 首屏即注册态（提交钮 = `AUTH_COPY.submit.register`、`activate` 勾选面出现）；② 进 `#/login` ⇒ 仍是登录态（既有默认行为不许翻面）。既有钉 ⛔ 放宽：`:364` 的 `queries.match(/'\\/api\\/register'/g)` 恰 1 颗、`:102` 的 fetch 分派形状都不许动。同路径先写条目带 `maxDiffLinesFor{T-19c:11, T-19d:13}`（历史实测值，不回改），本颗另开一条。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 36 }
+    },
+    {
+      "path": "apps/app/test/me-screen.spec.tsx",
+      "owner": "T-19e",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 **M-03 反向哨改判**（`:2083`「『登录』/『注册』都落 `#/login`（已知降级照裁定钉死：不造 `#/register`）、点击 0 请求」）：那半句「不造 `#/register`」钉的正是本轮要修的病灶 ⇒ 按 A-86 7C 改判为「「登录」落 `#/login`、「注册」落 `#/register`」，「点击 0 请求」那一半**原样保留**。⚠ 申报义务：这是跨轮翻转既有用例，报告必须逐字写改前/改后两句（先例 = A-94 #382 的翻转申报口径），⛔ 悄悄改绿。同路径先写条目八颗额度为历史实测值。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 24 }
+    },
+    {
+      "path": "apps/app/test/study-screen.spec.tsx",
+      "owner": "T-18a",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 `:1032` 的 `expect(hash()).toBe('#/login?mode=sign-in&from=study')` 与同组那颗注册钉：随屏侧死参清理改钉为 `#/login?from=study` / `#/register?from=study`。⛔ 删用例、⛔ 放宽成 `toContain`（那会把死参重新放回来）。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 14 }
+    },
+    {
+      "path": "apps/app/test/completion-screen.spec.tsx",
+      "owner": "T-18a",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 `:418` 的 `expect(hash()).toBe('#/login?mode=sign-in&from=study')` 同批改钉。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 10 }
+    },
+    {
+      "path": "apps/app/test/wordbook-screen.spec.tsx",
+      "owner": "T-18b",
+      "readers": [],
+      "reason": "精确路径条目（A-103 预开 · 2026-09-26 04:42:01 · TPM 亲写）：#47 E5-register 一轮独占，用完即止（先例 = A-100 的 E4d 六颗、A-91 的 E4b7、A-82 的 E4b2）。本通道只授权下面写明的这一处改动面，⛔ 顺带修别的。 `:1005` / `:1011` 两颗钉（`#/login?mode=sign-in&from=wordbook` / `#/login?mode=register&from=wordbook`）：改钉为 `#/login?from=wordbook` 与 `#/register?from=wordbook`。⛔ 把 `#/register` 写成 `#/login` 的别名去迁就旧钉（那等于病灶换个地方）。",
+      "handoff": false,
+      "actions": ["bounded-edit:A-103-E5-register"],
+      "maxDiffLinesFor": { "E5-register": 14 }
+    }
+  ],
+  "unowned_but_guarded": [
+    {
+      "path": "apps/web/src/**",
+      "note": "批次3/4 之前是存量代码；T-02 的门禁只读校验，不判归属（ownership 判定遇到无条目的文件时报 'no-entry'，非阻断）"
+    },
+    {
+      "path": "(E4a 登记面)",
+      "note": "E4a 账面收口后（出口实测）：no-entry 原样清单 67 → 52 行，其中 21 行是「HEAD 在册、工作区已删」的死文件（apps/web 旧 components/ui/* 13 件等，删文件不需要条目），真实盘上残余 31 件——全部是**建表前就存在的存量件**（apps/web 根配置与旧组件、packages/{server,shared,agent}/ 包根 package.json·tsconfig·Dockerfile、scripts/ 旧工具脚本含 .bat/.ps1/.sql 等），不在 §10.2 任何任务行里 → 保留 no-entry、列给 TPM 裁，不许为清零硬编 owner（本轮纪律）。另有两类账面已覆盖但判不准的遗留：① packages/server/src/services/** 9 件存量（RK-11，该条目 reason 里已挂 ⚠️）；② packages/server/src/{scripts/entry-guard.ts,scripts/ddl-parity-runner.ts} 等批次1 收口轮件由 packages/server/src/** 兜底条目覆盖、文件头只署裁决号 A-18 未署任务号 → 均 ⚠️ 待 TPM 裁"
+    }
+  ]
+}

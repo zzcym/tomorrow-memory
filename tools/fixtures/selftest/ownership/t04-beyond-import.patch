@@ -1,0 +1,13 @@
+diff --git a/apps/web/src/app/(user)/page.tsx b/apps/web/src/app/(user)/page.tsx
+index 1111111..2222222 100644
+--- a/apps/web/src/app/(user)/page.tsx
++++ b/apps/web/src/app/(user)/page.tsx
+@@ -1,5 +1,7 @@
+-import { Card } from '@tm/ui';
++import { Card } from '@tm/ui';
++import { PageHeader } from '@tm/ui/patterns';
+ 
+ export default function TodayPage() {
++  const pending = 12;
+   return <Card title="今日复习"><PageHeader /></Card>;
+ }
