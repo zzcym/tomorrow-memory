@@ -45,16 +45,33 @@ export function reviewQueueQueryOptions(mode: QueueMode = 'review') {
  * 红点数取数的**唯一实现**：`dueCountQueryOptions` 与 §5.5 第 3 步 `refreshDueCount()` 共用，
  * 不写第二份。
  */
-export async function fetchDueCount(): Promise<number> {
+export interface StudySummary {
+  /** 今天到期要复习的词数。 */
+  dueToday: number;
+  /** 还没学过（无 FSRS 卡）的词数；老服务端不返回时按 0 处理。 */
+  newAvailable: number;
+}
+
+/**
+ * 首页胶囊与 tab 红点共用的一份"还有多少要学/要背"（bug #1：优先显示没学过的）。
+ * 一次请求同时拿两个数，避免启动链多发一条。
+ */
+export async function fetchStudySummary(): Promise<StudySummary> {
   const raw = await apiGet<unknown>('/api/review/queue', {
     auth: true,
     query: { mode: 'review', limit: 1 },
   });
   const queue = ReviewQueueResultSchema.safeParse(raw);
-  if (queue.success) return queue.data.dueToday;
+  if (queue.success) {
+    return { dueToday: queue.data.dueToday, newAvailable: queue.data.newAvailable ?? 0 };
+  }
   const dedicated = DueCountSchema.safeParse(raw);
-  if (dedicated.success) return dedicated.data.dueToday;
-  return unwrapParse<number>({ success: false, error: raw });
+  if (dedicated.success) return { dueToday: dedicated.data.dueToday, newAvailable: 0 };
+  return unwrapParse<StudySummary>({ success: false, error: raw });
+}
+
+export async function fetchDueCount(): Promise<number> {
+  return (await fetchStudySummary()).dueToday;
 }
 
 /**

@@ -21,9 +21,10 @@ import {
   loadState,
   pendingCount,
   saveState,
+  subscribeQueueChange,
 } from './offline-queue.js';
 import { pushWordbook, pullWordbook } from './queries/wordbook.js';
-import { fetchDueCount } from './queries/review.js';
+import { fetchStudySummary, type StudySummary } from './queries/review.js';
 import { ApiError, apiGet, API_BASE, hasCredential } from './rest-fetcher.js';
 import { currentAppVersion, kvGet, kvSet } from '../native/bridge.js';
 
@@ -44,7 +45,7 @@ export interface StartupStepResult {
 export interface StartupDeps {
   flush: () => Promise<unknown>;
   pull: (since: number) => Promise<unknown>;
-  dueCount: () => Promise<number>;
+  dueCount: () => Promise<StudySummary>;
   version: () => Promise<VersionPrompt | null>;
   now: () => number;
 }
@@ -71,7 +72,7 @@ const defaultDeps: StartupDeps = {
     saveState({ ...state, baseVersion: shape.version });
     return shape;
   },
-  dueCount: () => fetchDueCount(),
+  dueCount: () => fetchStudySummary(),
   version: () => checkAppVersion(),
   now: () => Date.now(),
 };
@@ -93,7 +94,11 @@ export async function runStartup(options: RunStartupOptions = {}): Promise<Start
     try {
       const value = await runStep(step, deps, since);
       results.push({ step, ok: true, value });
-      if (step === 'dueCount' && typeof value === 'number') setDueCount(value);
+      if (step === 'dueCount' && value !== null && typeof value === 'object') {
+        const summary = value as StudySummary;
+        setDueCount(summary.dueToday);
+        setNewCount(summary.newAvailable);
+      }
     } catch (error) {
       results.push({ step, ok: false, error });
     }
@@ -125,9 +130,11 @@ export interface SyncStatus {
   failed: boolean;
   /** 今日待背数，null = 还没拿到。 */
   dueCount: number | null;
+  /** 还没学过的词数（bug #1：首页胶囊优先显示它），null = 还没拿到。 */
+  newCount: number | null;
 }
 
-let status: SyncStatus = { syncedAt: 0, pending: 0, failed: false, dueCount: null };
+let status: SyncStatus = { syncedAt: 0, pending: 0, failed: false, dueCount: null, newCount: null };
 const statusListeners = new Set<() => void>();
 
 function notifyStatus(): void {
@@ -165,6 +172,10 @@ export function setSyncFailed(failed: boolean): void {
 
 export function setDueCount(due: number | null): void {
   patchStatus({ dueCount: due });
+}
+
+export function setNewCount(n: number | null): void {
+  patchStatus({ newCount: n });
 }
 
 export function publishPending(): void {
@@ -344,7 +355,7 @@ export async function checkAppVersion(
 /** 测试用：把提示状态清干净，避免用例间互相污染。 */
 export function resetVersionPrompt(): void {
   prompt = null;
-  status = { syncedAt: 0, pending: 0, failed: false, dueCount: null };
+  status = { syncedAt: 0, pending: 0, failed: false, dueCount: null, newCount: null };
   notifyPrompt();
   notifyStatus();
 }
@@ -352,6 +363,33 @@ export function resetVersionPrompt(): void {
 /* ═════════════════ 登录态相关：把"未登录就别打业务接口"收在一处 ═════════════════ */
 
 /** 冷启动 / 回前台是否值得跑 1-3 步（401 已有单点处理，但没凭据时连请求都不该发）。 */
+/**
+ * 入队后**立刻补传**（bug #4/#6/#7）。
+ *
+ * 修的是"只写本地、不回传"这条断链：以前补传只在冷启动/回前台跑，所以查词自动入库的词
+ * 会一直躺在队列里 —— 词本页看得见（本地乐观），服务端的随机自测/学新词/统计却还是空的，
+ * 单词本 tab 上的待同步小点也永远不清。这里做 1.2s 防抖：连查几个词只发一批。
+ *
+ * 失败不重试、不报错：`flushOfflineQueue` 自己已经做过退避重试，剩下的交给下一次启动链。
+ */
+const FLUSH_DEBOUNCE_MS = 1200;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function scheduleSyncFlush(delayMs: number = FLUSH_DEBOUNCE_MS): void {
+  if (!hasCredential()) return;
+  if (flushTimer !== null) clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void defaultDeps.flush().catch(() => undefined);
+  }, delayMs);
+}
+
+/* 队列一变就刷新"待同步 N"并排一次补传（订阅在模块加载时挂一次，幂等）。 */
+subscribeQueueChange(() => {
+  publishPending();
+  scheduleSyncFlush();
+});
+
 export function shouldRunSyncChain(): boolean {
   return hasCredential();
 }

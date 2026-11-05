@@ -339,7 +339,8 @@ describe('判据①：§3.3.1 四契约 + auth + review-queue 六份文件', () 
     // 旧响应多带的统计键必须能过（.passthrough）
     expect(ProfileDtoSchema.safeParse({ ...dto, totalWords: 42, reviewDays: 3 }).success).toBe(true);
     expect(ProfileDtoSchema.safeParse({ ...dto, daily_goal: 0 }).success).toBe(false);
-    expect(ProfileDtoSchema.safeParse({ ...dto, daily_goal: 201 }).success).toBe(false);
+    // bug #2：契约上限 200 → 500（用户要求滑杆上限可调到 300），越界探针同步挪到 501
+    expect(ProfileDtoSchema.safeParse({ ...dto, daily_goal: 501 }).success).toBe(false);
     expect(ProfileRowSchema.parse({ user_id: 1, nickname: '', avatar: '', daily_goal: 10, updated_at: 0 }).user_id).toBe(1);
     expect(UserRowSchema.parse({ id: 1, phone: '13800000000', password: null, created_at: 0 }).password).toBe(null);
     expect(decodedDataUrlBytes('data:image/png;base64,QUJDRA==')).toBe(4);

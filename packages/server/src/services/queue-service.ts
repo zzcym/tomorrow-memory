@@ -149,13 +149,21 @@ export async function buildQueue(
   const cards = await loadCards(db, userId);
   const words = [...new Set([...wordbook.map((w) => w.word.toLowerCase()), ...cards.keys()])];
 
-  const base = { mode, total: today.total, dueToday: today.dueToday, dailyGoal, wordbookSize: words.length };
+  // 新词数在三种模式下算一次：首页胶囊要"优先显示还有几个词没学"（bug #1）。
+  const fresh = words.filter((w) => !isSchooled(cards, w));
+  const base = {
+    mode,
+    total: today.total,
+    dueToday: today.dueToday,
+    dailyGoal,
+    wordbookSize: words.length,
+    newAvailable: fresh.length,
+  };
 
   if (mode === 'review') {
     return { ...base, queue: today.queue.map((q) => item(q.word, cards)) };
   }
   if (mode === 'new') {
-    const fresh = words.filter((w) => !isSchooled(cards, w));
     return { ...base, queue: take(fresh, cap).map((w) => item(w, cards)) };
   }
   if (words.length < SELF_TEST_MIN_WORDS) {

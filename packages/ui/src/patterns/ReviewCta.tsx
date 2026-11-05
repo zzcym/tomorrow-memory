@@ -18,6 +18,11 @@ export interface ReviewCtaProps {
   loading?: boolean;
   streak?: number;
   ariaLabel?: string;
+  /**
+   * 自定义胶囊文案（bug #1：首页要优先显示"还有 N 个词没学"，而本组件只知道 due）。
+   * 传了就覆盖内部按 `due`/`signedIn` 推出的文案；不传 = 原行为。
+   */
+  text?: string;
   className?: string;
   testid?: string;
 }
@@ -30,16 +35,19 @@ function ReviewCta({
   loading = false,
   streak,
   ariaLabel,
+  text: textOverride,
   className,
   testid,
 }: ReviewCtaProps): React.JSX.Element {
   const host = useHost();
 
-  const text = !signedIn
-    ? HOME_CAPSULE.signedOut(due)
-    : due > 0
-      ? HOME_CAPSULE.due(due)
-      : HOME_CAPSULE.cleared;
+  const text =
+    textOverride ??
+    (!signedIn
+      ? HOME_CAPSULE.signedOut(due)
+      : due > 0
+        ? HOME_CAPSULE.due(due)
+        : HOME_CAPSULE.cleared);
 
   const label = ariaLabel ?? (streak != null ? `${text} · ${formatStreak(streak)}` : text);
 

@@ -158,6 +158,8 @@ export const SEARCH_PLACEHOLDER_WHILE_TYPING = null;
 
 /** 首页胶囊三态。 */
 export const HOME_CAPSULE = {
+  /** bug #1：优先显示"还没学的词"，其次才是有多少要复习。 */
+  toLearn: (n: number): string => `还有 ${n} 个词没学`,
   due: (n: number): string => `今天还有 ${n} 个词要背`,
   cleared: '今天的词背完了',
   signedOut: (n: number): string => `登录后可同步，本机已背 ${n} 词`,
@@ -168,6 +170,8 @@ export const HOME_CAPSULE = {
 export const LOOKUP_COPY = {
   /** 搜索中（≥300ms 才显示）：无文字，只有骨架。 */
   searching: null,
+  /** bug #3：查词命中即自动入库的那条提示（与手动加星区分，且同样可撤销）。 */
+  autoAdded: '已自动放进单词本',
   notFound: {
     title: '没找到这个词',
     subtitle: '检查一下拼写，或者换个词形试试',
@@ -388,7 +392,8 @@ export const WORDBOOK_COPY = {
   /** 同步徽章替代任何"已同步/未同步"式内部名词（§6.2 第 6 行）。 */
   syncBadge: {
     synced: (hhmm: string): string => `已同步 · ${hhmm}`,
-    pending: (n: number): string => `待同步 ${n}`,
+    /* bug #7：原来只写「待同步 N」，用户不知道在等什么。改成一句人话（N 个词还没传上去）。 */
+  pending: (n: number): string => `还有 ${n} 个词待上传`,
     offlineSilent: null,
     replayFail: '还没同步 · 联网后会自动补上',
     retry: '重试',
@@ -553,6 +558,22 @@ export const SETTINGS_COPY = {
     },
     sliderAria: (n: number): string => `每日目标，当前 ${n} 词`,
     sliderValueText: (n: number): string => `${n} 词`,
+    /* bug #2：滑杆上限可自己改 —— 这几串是那个小编辑器的全部对外文案。 */
+    maxButton: (n: number): string => `上限 ${n} 词`,
+    maxLabel: '每日目标上限',
+    maxConfirm: '确定',
+    maxCancel: '取消',
+  },
+  /* bug #5：账号头（头像上传 + 昵称编辑）。原先这两个动作没实现，屏里也没有任何串。 */
+  account: {
+    changeAvatar: '更换头像',
+    nicknameLabel: '昵称',
+    save: '保存',
+    cancel: '取消',
+    avatarUpdated: '头像已更新',
+    nicknameUpdated: '昵称已更新',
+    pickImage: '请选择图片文件',
+    decodeFail: '这张图读不出来，换一张试试',
   },
   /**
    * §3.8.1 分区 C「三张统计卡」（缺口 G-3 · T-19g-i 从 UI 规范逐字上收）。

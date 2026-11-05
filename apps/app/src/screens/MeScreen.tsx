@@ -173,10 +173,12 @@ import {
   BRAND,
   CHECKIN_COPY,
   DAILY_GOAL_DEFAULT,
+  DAILY_GOAL_MAX,
   DAILY_GOAL_UI_MAX,
   DAILY_GOAL_UI_MIN,
-  DAILY_GOAL_UI_PRESETS,
   DAILY_GOAL_UI_STEP,
+  NICKNAME_MAX_LENGTH,
+  AVATAR_MAX_SIDE_PX,
   NAV_ITEMS,
   SETTINGS_COPY,
   THEME_MODE_LABELS,
@@ -197,8 +199,9 @@ import {
 import { useDueBadge } from '../components/due-badge-data.js';
 import { profileProgressOf } from '../components/progress-data.js';
 import { checkinStatusQueryOptions } from '../data/queries/checkin.js';
-import { profileKeys, profileQueryOptions, updateProfile } from '../data/queries/profile.js';
+import { profileKeys, profileQueryOptions, updateProfile, uploadAvatar } from '../data/queries/profile.js';
 import { apiErrorMessage } from '../data/rest-fetcher.js';
+import { DECODE_FAILED, downscaleImage } from '../lib/image.js';
 import { LOGIN_ROUTE, REGISTER_ROUTE, signOut, useAuthSnapshot } from '../lib/auth-store.js';
 import { navigate } from '../router.js';
 import { SyncBadge } from '../shell/TabBarShell.js';
@@ -242,8 +245,28 @@ export const GOAL_SLIDER = {
   step: DAILY_GOAL_UI_STEP,
 } as const;
 
-/** 刻度：两端 + 三个常用档，均匀铺开（值与位置近似对齐，只做视觉参照）。 */
-const SLIDER_TICKS: readonly number[] = [GOAL_SLIDER.min, 50, 100, 150, GOAL_SLIDER.max];
+/** 自定义上限的持久化键（本机，不进 profile —— 它是"滑杆能拉到多远"，不是账号数据）。 */
+export const GOAL_MAX_KEY = 'tm.goalMax';
+/** 上限可调的最小值：再小就没法"每天背一点"了，且 `2` 是刻意保留的下界（bug #2 的边界）。 */
+export const GOAL_MAX_FLOOR = 2;
+
+/** 把任意输入夹成合法上限；非数字 / 越界一律落回默认值，绝不产生 NaN。 */
+export function clampGoalMax(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(n)) return DAILY_GOAL_UI_MAX;
+  return Math.max(GOAL_MAX_FLOOR, Math.min(DAILY_GOAL_MAX, Math.round(n)));
+}
+
+/**
+ * 快捷档随上限自适应（bug #2）：上限 200 时是 5/50/100/150/200，改小到大都还有可点的档。
+ * 取比例位 + 去重排序；上限小（如 2）时全部塌成同一个值 → 只剩一颗，不会出现负数/倒序档位。
+ */
+export function goalPresetsOf(max: number): readonly number[] {
+  const base = [Math.min(DAILY_GOAL_UI_MIN, max), Math.round(max * 0.25), Math.round(max * 0.5), Math.round(max * 0.75), max];
+  const inside = base.map((n) => clampGoalMax(n)).filter((n) => n <= max);
+  return [...new Set(inside)].sort((a, b) => a - b);
+}
+
 
 const clampToSlider = (n: number): number => {
   if (!(n >= GOAL_SLIDER.min)) return GOAL_SLIDER.min;
@@ -352,7 +375,39 @@ export default function MeScreen(): React.JSX.Element {
    * 只有点「保存」才会把草稿写出去 ⇒ 取消、切走、`onBlur` 一律静默（不发请求、不写、不 toast）。
    */
   const [draft, setDraft] = React.useState<number | null>(null);
-  const goal = clampToSlider(draft ?? serverGoal);
+  /* bug #5：头像上传 + 昵称编辑（原先头像/昵称是纯静态文本，点了没反应）。 */
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const [nickDraft, setNickDraft] = React.useState<string | null>(null);
+
+  const avatarMutation = useMutation({
+    mutationFn: (input: { dataUrl: string; bytes: number }) => uploadAvatar(input.dataUrl, input.bytes),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: profileKeys.all });
+      host.toast(SETTINGS_COPY.account.avatarUpdated, 'success');
+    },
+    onError: (error) => {
+      host.toast(apiErrorMessage(error), 'error');
+    },
+  });
+
+  const nicknameMutation = useMutation({
+    mutationFn: (nickname: string) => updateProfile({ nickname }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: profileKeys.all });
+      setNickDraft(null);
+      host.toast(SETTINGS_COPY.account.nicknameUpdated, 'success');
+    },
+    onError: (error) => {
+      host.toast(apiErrorMessage(error), 'error');
+    },
+  });
+
+  /** bug #2：滑杆上限可自己改（持久化在本机），默认仍是 200。 */
+  const [goalMax, setGoalMax] = React.useState<number>(() => clampGoalMax(host.kv.get(GOAL_MAX_KEY)));
+  const [maxEditing, setMaxEditing] = React.useState(false);
+  const [maxDraft, setMaxDraft] = React.useState('');
+  const goal = Math.min(goalMax, clampToSlider(draft ?? serverGoal));
+  const goalPresets = React.useMemo(() => goalPresetsOf(goalMax), [goalMax]);
   const dirty = draft !== null && draft !== serverGoal;
 
   /* 写侧的唯一点：既有 `updateProfile()`（`PUT /api/profile`，入参形状由 shared 的 `ProfileUpdateInputSchema` 在服务端裁决）。 */
@@ -370,6 +425,31 @@ export default function MeScreen(): React.JSX.Element {
   React.useEffect(() => {
     if (draft !== null && draft === serverGoal) setDraft(null);
   }, [draft, serverGoal]);
+
+  /** bug #5：唤起系统选图（Java 的 onShowFileChooser 已接线）。 */
+  const onAvatarFile = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const input = event.currentTarget;
+    const file = input.files !== null && input.files.length > 0 ? input.files[0] : null;
+    /* 清空 value：否则同一张图连选两次不触发 change。 */
+    input.value = '';
+    if (file === null || file === undefined) return;
+    if (!file.type.startsWith('image/')) {
+      host.toast(SETTINGS_COPY.account.pickImage, 'error');
+      return;
+    }
+    try {
+      const dataUrl = await downscaleImage(file, AVATAR_MAX_SIDE_PX);
+      const base64 = dataUrl.split(',')[1] ?? '';
+      const bytes = Math.floor((base64.length * 3) / 4);
+      await avatarMutation.mutateAsync({ dataUrl, bytes });
+    } catch (error) {
+      if (error instanceof Error && error.message === DECODE_FAILED) {
+        host.toast(SETTINGS_COPY.account.decodeFail, 'error');
+        return;
+      }
+      host.toast(apiErrorMessage(error), 'error');
+    }
+  };
 
   const onSave = async (): Promise<void> => {
     // `disabled` 只是视觉面，这里再守一次：没弄脏 / 在飞 ⇒ 一个请求都不发（静默，不 toast）。
@@ -559,14 +639,75 @@ export default function MeScreen(): React.JSX.Element {
 
       {account ? (
         <div className="flex items-center gap-3 pb-4 pt-4">
-          {/* §3.8.1:953 的 56px 圆形头像；非交互（§3.8.4 相册选图链未接线）。缺图回落 = 品牌底 + 昵称首字。 */}
-          <Avatar className="h-14 w-14">
-            {account.avatar ? <AvatarImage src={account.avatar} alt="" /> : null}
-            <AvatarFallback>{account.nickname.slice(0, 1)}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <p className="truncate text-base font-semibold text-ink">{account.nickname}</p>
-            <p className="text-xs text-ink-muted">{maskPhone(account.phone)}</p>
+          {/* §3.8.1:953 的 56px 圆形头像。bug #5：可点 —— 唤起系统选图，缩到 ≤200px 后上传。 */}
+          <button
+            type="button"
+            aria-label={SETTINGS_COPY.account.changeAvatar}
+            onClick={() => fileRef.current?.click()}
+            disabled={avatarMutation.isPending}
+            className="relative h-14 w-14 shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2"
+          >
+            <Avatar className="h-14 w-14">
+              {account.avatar ? <AvatarImage src={account.avatar} alt="" /> : null}
+              <AvatarFallback>{account.nickname.slice(0, 1)}</AvatarFallback>
+            </Avatar>
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => {
+              void onAvatarFile(event);
+            }}
+          />
+          <div className="min-w-0 flex-1">
+            {nickDraft === null ? (
+              <button
+                type="button"
+                onClick={() => setNickDraft(account.nickname)}
+                className="max-w-full truncate text-left text-base font-semibold text-ink underline decoration-dotted underline-offset-4"
+              >
+                {account.nickname}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={nickDraft}
+                  maxLength={NICKNAME_MAX_LENGTH}
+                  aria-label={SETTINGS_COPY.account.nicknameLabel}
+                  onChange={(event) => setNickDraft(event.currentTarget.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-hair bg-surface px-2 py-1 text-base text-ink"
+                />
+                <button
+                  type="button"
+                  disabled={nicknameMutation.isPending || nickDraft.trim() === ''}
+                  onClick={() => {
+                    const next = nickDraft.trim();
+                    if (next === '') return;
+                    if (next === account.nickname) {
+                      setNickDraft(null);
+                      return;
+                    }
+                    void nicknameMutation.mutateAsync(next).catch(() => undefined);
+                  }}
+                  className="min-h-tap rounded-lg bg-brand px-3 text-sm text-on-brand"
+                >
+                  {SETTINGS_COPY.account.save}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNickDraft(null)}
+                  className="min-h-tap rounded-lg border border-hair px-3 text-sm"
+                >
+                  {SETTINGS_COPY.account.cancel}
+                </button>
+              </div>
+            )}
+            <p className="mt-0.5 text-xs text-ink-muted">{maskPhone(account.phone)}</p>
           </div>
         </div>
       ) : null}
@@ -660,7 +801,7 @@ export default function MeScreen(): React.JSX.Element {
           {/* bug_list #6：滑杆改成 step=1 的连续可调，再补一排快捷档位 —— 
               单手拖动只出 1 词的粒度，要「10 / 20 / 50 / 100」时点一下就到位。 */}
           <div className="mt-3 flex flex-wrap gap-2">
-            {DAILY_GOAL_UI_PRESETS.map((preset) => {
+            {goalPresets.map((preset) => {
               const active = goal === preset;
               return (
                 <button
@@ -684,8 +825,8 @@ export default function MeScreen(): React.JSX.Element {
 
           <input
             type="range"
-            min={GOAL_SLIDER.min}
-            max={GOAL_SLIDER.max}
+            min={Math.min(GOAL_SLIDER.min, goalMax)}
+            max={goalMax}
             step={GOAL_SLIDER.step}
             value={goal}
             aria-label={SETTINGS_COPY.dailyGoal.sliderAria(goal)}
@@ -695,11 +836,60 @@ export default function MeScreen(): React.JSX.Element {
           />
 
           <div className="flex justify-between text-xs text-ink-muted">
-            {SLIDER_TICKS.map((tick) => (
+            {goalPresets.map((tick) => (
               <span key={tick} className="tnum">
                 {SETTINGS_COPY.dailyGoal.value(tick)}
               </span>
             ))}
+          </div>
+
+          {/* bug #2：上限本身可以改。改小/改大之后上面的快捷档与刻度一起跟着变。 */}
+          <div className="mt-2 flex items-center justify-end gap-2 text-xs text-ink-muted">
+            {maxEditing ? (
+              <>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={GOAL_MAX_FLOOR}
+                  max={DAILY_GOAL_MAX}
+                  value={maxDraft}
+                  aria-label={SETTINGS_COPY.dailyGoal.maxLabel}
+                  onChange={(event) => setMaxDraft(event.currentTarget.value)}
+                  className="w-20 rounded-lg border border-hair bg-surface px-2 py-1 text-right text-ink tnum"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = clampGoalMax(maxDraft);
+                    setGoalMax(next);
+                    host.kv.set(GOAL_MAX_KEY, String(next));
+                    if ((draft ?? serverGoal) > next) setDraft(next);
+                    setMaxEditing(false);
+                  }}
+                  className="min-h-tap rounded-lg bg-brand px-3 text-on-brand"
+                >
+                  {SETTINGS_COPY.dailyGoal.maxConfirm}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMaxEditing(false)}
+                  className="min-h-tap rounded-lg border border-hair px-3"
+                >
+                  {SETTINGS_COPY.account.cancel}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMaxDraft(String(goalMax));
+                  setMaxEditing(true);
+                }}
+                className="min-h-tap rounded-lg px-2 underline decoration-dotted underline-offset-2"
+              >
+                {SETTINGS_COPY.dailyGoal.maxButton(goalMax)}
+              </button>
+            )}
           </div>
 
           <div className="mt-3 flex justify-end">

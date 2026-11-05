@@ -170,7 +170,8 @@ describe('§5.5 启动链：固定顺序 + 每步隔离（R-20①④）', () => 
         },
         dueCount: async () => {
           calls.push('dueCount');
-          return 7;
+          // bug #1：该步现在返回 {dueToday, newAvailable} 两个数（首页胶囊优先显示没学的）
+          return { dueToday: 7, newAvailable: 0 };
         },
         version: async () => {
           calls.push('version');
@@ -220,7 +221,7 @@ describe('§5.5 启动链：固定顺序 + 每步隔离（R-20①④）', () => 
         },
         dueCount: async () => {
           called += 1;
-          return 0;
+          return { dueToday: 0, newAvailable: 0 };
         },
         version: async () => {
           called += 1;
@@ -236,20 +237,20 @@ describe('§5.5 启动链：固定顺序 + 每步隔离（R-20①④）', () => 
 
 describe('R-20⑤ 的同步文案三态（口径唯一源 SYNC_COPY）', () => {
   it('待同步 N > 还没同步 > 已同步 · HH:MM > 什么都不显示', () => {
-    expect(syncLabel({ syncedAt: T0, pending: 3, failed: false, dueCount: null })).toBe(
+    expect(syncLabel({ syncedAt: T0, pending: 3, failed: false, dueCount: null, newCount: null })).toBe(
       SYNC_COPY.pending(3),
     );
-    expect(syncLabel({ syncedAt: T0, pending: 0, failed: true, dueCount: null })).toBe(
+    expect(syncLabel({ syncedAt: T0, pending: 0, failed: true, dueCount: null, newCount: null })).toBe(
       SYNC_COPY.replayFail,
     );
     const clock = formatClock(T0, T0 + 1000);
-    expect(syncLabel({ syncedAt: T0, pending: 0, failed: false, dueCount: null })).toBe(
+    expect(syncLabel({ syncedAt: T0, pending: 0, failed: false, dueCount: null, newCount: null })).toBe(
       SYNC_COPY.synced(String(clock)),
     );
-    expect(syncLabel({ syncedAt: 0, pending: 0, failed: false, dueCount: null })).toBe(
+    expect(syncLabel({ syncedAt: 0, pending: 0, failed: false, dueCount: null, newCount: null })).toBe(
       SYNC_COPY.offlineQuiet,
     );
-    expect(syncLabel({ syncedAt: 0, pending: 0, failed: false, dueCount: null })).toBeNull();
+    expect(syncLabel({ syncedAt: 0, pending: 0, failed: false, dueCount: null, newCount: null })).toBeNull();
   });
 
   it('未来时间与 0 都算"没同步过"（时钟回拨不给用户看假承诺）', () => {

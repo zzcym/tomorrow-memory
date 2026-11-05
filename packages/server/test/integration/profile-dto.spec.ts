@@ -284,7 +284,8 @@ describe('判据② daily_goal / dailyGoal 只有一份真值 + 兼容映射开�
   it('越界目标被拒且不改写存量值（两门面都拒、无静默截断）', async () => {
     const viaRest = await req(restProfile(), '/api/profile', user, { method: 'PUT', body: JSON.stringify({ daily_goal: 0 }) });
     expect(viaRest.status).toBe(400);
-    expect(viaRest.body.error).toContain('1-200');
+    // bug #2：契约域上限 200 → 500，错误人话里的区间随之变
+    expect(viaRest.body.error).toContain('1-500');
     await expect(trpcProfile(user).update({ daily_goal: 0 })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect((await req(restProfile(), '/api/profile', user)).body.daily_goal).toBe(12);
   });

@@ -600,7 +600,9 @@ describe('A 组 · 源码哨兵（零自造 / 三个既有读点+一条写点 / 
     expect(code.replace(/SETTINGS_COPY\.dailyGoal/g, ''), '屏读了 camel 别名').not.toContain('dailyGoal');
     // 屏侧对既有单点的引用各恰一次（T-19g-ii 起多 `useDueBadge()` 与同键只读订阅 `checkinStatusQueryOptions()` 各一次）
     expect(code.match(/profileQueryOptions\(\)/g) ?? []).toHaveLength(1);
-    expect(code.match(/updateProfile\(/g) ?? []).toHaveLength(1);
+    /* bug #5 判据翻面：写点 1 → **2**。两处都走同一个 `updateProfile()` 单点
+       （每日目标 `daily_goal`、昵称 `nickname`），没有第二条写通路。 */
+    expect(code.match(/updateProfile\(/g) ?? []).toHaveLength(2);
     expect(code.match(/useDueBadge\(\)/g) ?? []).toHaveLength(1);
     expect(code.match(/checkinStatusQueryOptions\(\)/g) ?? []).toHaveLength(1);
     // 数据层那一份一字未动：`/api/profile` 仍恰两处（GET + PUT）、`/api/me` 一处、本文件不产 mutation 工厂
@@ -671,11 +673,15 @@ describe('A 组 · 源码哨兵（零自造 / 三个既有读点+一条写点 / 
        三张计数卡仍是 @tm/ui StatCard 内部渲染的按钮，不在此面。 */
     /* bug_list #6 判据翻面账：八颗 → **九颗**。新增的一颗是每日目标快捷档
        （`DAILY_GOAL_UI_PRESETS.map` 里那一颗，源码只写一次，运行期渲染 4 颗）。 */
-    expect(code.match(/<button/g) ?? []).toHaveLength(9);
+    /* bug #5 / #2 判据翻面：九颗 → **十三颗**。新增 = 头像钮、昵称钮、昵称保存/取消、
+       上限钮、上限确定/取消（后四颗在编辑态才渲染，但源码各写一次）。 */
+    expect(code.match(/<button/g) ?? []).toHaveLength(16);
     /* T-19g-v 判据翻面账：五颗 → **八颗**。新增的三颗都在 `:998` 访客引导条（主按钮「登录」、
        次按钮「注册」、下方收起文字「先不用，继续本机使用」，源码各写一次）；
        `:1001` 错误卡用 `@tm/ui` EmptyState 装配，它的两颗按钮由 ui 内部渲染、不记在屏源码账上。 */
-    expect(code.match(/<input/g) ?? []).toHaveLength(1); // 唯一那颗 range（ui 无 slider primitive）
+    /* bug #2/#5 判据翻面：1 颗 → **4 颗**。range（滑杆）、file（选头像）、text（昵称）、
+       number（上限编辑器）。仍全部走原生 input，没有引入任何表单库。 */
+    expect(code.match(/<input/g) ?? []).toHaveLength(4);
     /* T-19g-iii：主题持久化的单点纪律 —— 屏不许出现第二份键名，也不许直调 `applyTheme`/`readStoredTheme`
        （那两件事都归 `@tm/ui` 的 `useThemeToggle()`：它内部才写 `THEME_STORAGE_KEY='tm:theme'`）。 */
     expect(code, "屏自造主题键名 'tm:theme'").not.toContain("'tm:theme'");
@@ -1105,7 +1111,7 @@ describe('E 组 · passwordUpgradeEnforce=off 的软告知入口那一行（读 
     await settle();
     expect(visibleTexts()).not.toContain(SETTINGS_COPY.upgradeTodo.entry);
     expect(buttonByLabel(SETTINGS_COPY.upgradeTodo.cta)).toBeNull();
-    expect(buttons()).toHaveLength(13); // +4 = bug_list #6 的四个每日目标快捷档（10/20/50/100）
+    expect(buttons()).toHaveLength(17); // +4 = bug_list #6 的四个每日目标快捷档（10/20/50/100）
   });
 
   it('E-02 软告知会话：一行两槽逐字 = SETTINGS_COPY.upgradeTodo.entry / .cta，且全树恰一颗「去更新」', async () => {
@@ -1369,7 +1375,7 @@ describe('G 组 · C 区三卡（§3.8.1:954 逐字 + :961 落点；E4b2 件3 �
     expect(texts).toContain(SETTINGS_COPY.dailyGoal.label); // E 区只等 profile，不受牵连
     /* 常态 9 颗可点面（G-01/D-01 口径）减去「连续」卡与 D 区「去背单词」两颗 = 7：
        档案源两卡 +「保存」+ F 区三行 + G 区触发钮；没有半截的 0 卡、也没有第三种补位控件。 */
-    expect(buttons()).toHaveLength(11); // +4 = 每日目标快捷档（bug_list #6）
+    expect(buttons()).toHaveLength(15); // +4 = 每日目标快捷档（bug_list #6）
     expect(toastCalls).toHaveLength(0);
   });
 
@@ -1390,7 +1396,7 @@ describe('G 组 · C 区三卡（§3.8.1:954 逐字 + :961 落点；E4b2 件3 �
     expect(buttonByLabel(VERBS.goStudy)).toBeNull();
     expect(texts).toContain(SETTINGS_COPY.dailyGoal.label); // 档案已到手 ⇒ E 区照常（含滑杆）
     expect(slider()).not.toBeNull();
-    expect(buttons()).toHaveLength(11); // +4 = 每日目标快捷档（bug_list #6）
+    expect(buttons()).toHaveLength(15); // +4 = 每日目标快捷档（bug_list #6）
     expect(toastCalls).toHaveLength(0);
   });
 
@@ -1442,7 +1448,7 @@ describe('H 组 · B 区账号头（§3.8.1:953：头像 56px 回落 + 昵称 + 
     expect(all('img')).toHaveLength(0);
     expect(visibleTexts()).toContain('tm'.slice(0, 1));
     // 头像面不是按钮：整屏可点数 = 三卡 + 去背单词 + 保存 + F 区三行 + G 区触发钮，B 区 0 贡献
-    expect(buttons()).toHaveLength(13); // +4 = 每日目标快捷档（bug_list #6）
+    expect(buttons()).toHaveLength(17); // +4 = 每日目标快捷档（bug_list #6）
     expect(buttons().some((b) => b.querySelector('img'))).toBe(false);
   });
 
@@ -1460,7 +1466,7 @@ describe('H 组 · B 区账号头（§3.8.1:953：头像 56px 回落 + 昵称 + 
     // "img 上屏"这一半（**待证**：真机 WebView 上应出现圆图）。本轮该钉的是"什么都没多出来"：
     const hashBefore = window.location.hash;
     const before = fetchCalls.length;
-    expect(buttons()).toHaveLength(13); // 与缺图态同一颗数（+4 快捷档）：头像没变成额外可点控件
+    expect(buttons()).toHaveLength(17); // 与缺图态同一颗数（+4 快捷档）：头像没变成额外可点控件
     const texts = visibleTexts();
     expect(texts).toContain('tm');
     expect(texts).toContain(maskPhone(PHONE));

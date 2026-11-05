@@ -200,6 +200,33 @@ export type UpsertPatch = Partial<
 > & { [k: string]: unknown };
 
 /** 收藏（乐观写入本地队列）。写盘失败抛 {@link QueueWriteError}，调用方据此回失败反馈。 */
+/**
+ * 队列变更广播（bug #4/#6/#7 的修复钩子）。
+ *
+ * 为什么需要：`enqueueUpsert`/`enqueueRemove` 只改本地存储，而补传以前**只在冷启动/回前台**跑
+ * （`startup.ts` 的 flush 步）。于是"查词自动入库"写下的条目会一直挂着：词本页看得见，
+ * 服务端的自测/学新词/统计却还是空的，tab 上的待同步点也永远不消失。
+ * 这里只广播"队列变了"，不碰网络也不碰状态机（订阅方在 `data/startup.ts`）。
+ */
+const queueChangeListeners = new Set<() => void>();
+
+export function subscribeQueueChange(fn: () => void): () => void {
+  queueChangeListeners.add(fn);
+  return () => {
+    queueChangeListeners.delete(fn);
+  };
+}
+
+function notifyQueueChange(): void {
+  for (const fn of Array.from(queueChangeListeners)) {
+    try {
+      fn();
+    } catch {
+      /* 订阅方抛错不得反噬入队本身（与 host/store 同口径） */
+    }
+  }
+}
+
 export function enqueueUpsert(word: string, patch: UpsertPatch = {}): PendingEntry {
   const value = normalizeWord(word);
   const state = loadState();
@@ -212,6 +239,7 @@ export function enqueueUpsert(word: string, patch: UpsertPatch = {}): PendingEnt
     pendingRemovals: state.pendingRemovals.filter((x) => x !== value),
     pendingUpserts: rest,
   });
+  notifyQueueChange();
   return entry;
 }
 
@@ -229,6 +257,7 @@ export function enqueueRemove(word: string): number {
     pendingUpserts: state.pendingUpserts.filter((x) => x.word !== value),
     pendingRemovals: state.pendingRemovals.concat(value),
   });
+  notifyQueueChange();
   return seq;
 }
 

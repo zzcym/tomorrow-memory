@@ -103,9 +103,13 @@ export const HTTP_BODY_LIMIT_BYTES = 512 * 1024;
 export const WORDBOOK_BODY_LIMIT_BYTES = 8 * 1024 * 1024;
 /** R-39⑦：新建账号的每日目标默认值（列默认值，双端读取一致）。 */
 export const DAILY_GOAL_DEFAULT = 10;
-/** R-04：`daily_goal` 定义域。 */
+/**
+ * R-04：`daily_goal` 定义域。
+ * 2026-11（bug #2）：上限 200 → 500。滑杆上限现在由用户自己设（默认仍是 200），
+ * 但他明确要求"改大就可以到 300" ⇒ 契约域必须容得下 300，否则服务端会拒。
+ */
 export const DAILY_GOAL_MIN = 1;
-export const DAILY_GOAL_MAX = 200;
+export const DAILY_GOAL_MAX = 500;
 /**
  * UI §3.8.3 逐字（`交付记录 03-ui-spec.md:979`「参数：`min=5 max=50 step=5`，默认 `10`」）：
  * 每日目标**滑杆**的取值域（缺口 G-1 · T-19g-i 上收）。数值，不是文案。

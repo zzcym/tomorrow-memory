@@ -105,6 +105,7 @@ exports[`判据④：R-06② 四处契约快照测试锁定 key 集合 > key 集
       "mode",
       "total",
       "dueToday",
+      "newAvailable",
       "queue",
     ],
     "reviewInput": [

@@ -37,6 +37,11 @@ export const ReviewQueueResultSchema = z.object({
   mode: ReviewQueueModeSchema,
   total: z.number().int().nonnegative(),
   dueToday: z.number().int().nonnegative(),
+  /**
+   * 还没学过（无 FSRS 卡）的词数（2026-11 追加，首页胶囊据此优先显示"还有 N 个词没学"）。
+   * 可选：老服务端不返回时客户端按"没有新词"处理，不编造。
+   */
+  newAvailable: z.number().int().nonnegative().optional(),
   queue: z.array(QueueItemSchema),
 });
 export type ReviewQueueResultDto = z.infer<typeof ReviewQueueResultSchema>;

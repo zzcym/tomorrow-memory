@@ -25,6 +25,7 @@
 import * as React from 'react';
 import {
   ARIA,
+  HOME_CAPSULE,
   LOOKUP_COPY,
   SEARCH_PLACEHOLDER,
   STUDY_COPY,
@@ -50,7 +51,8 @@ import {
 } from '@tm/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { lookupKeys, lookupQueryOptions } from '../data/queries/lookup.js';
-import { addWord, wordbookKeys, wordbookQueryOptions } from '../data/queries/wordbook.js';
+import { addWord, removeWord, wordbookKeys, wordbookQueryOptions } from '../data/queries/wordbook.js';
+import { WORDBOOK_APP_COPY } from '../components/wordbook-toolbar.js';
 import { hasCredential } from '../data/rest-fetcher.js';
 import { takeSearchFocusRequest } from '../native/launch-focus.js';
 import { useSyncStatus } from '../shell/TabBarShell.js';
@@ -126,7 +128,18 @@ export function LookupScreen(): React.JSX.Element {
   const queried = pending === null ? '' : pending.text;
   const direction: LookupDirectionValue = pending === null ? 'auto' : pending.applied;
   const signedIn = hasCredential();
-  const { dueCount } = useSyncStatus();
+  const { dueCount, newCount } = useSyncStatus();
+  /**
+   * 胶囊文案（bug #1）：未登录 → 不显示；有未学词 → "还有 N 个词没学"；
+   * 否则有到期词 → 原有"今天还有 N 个词要背"；都没有 → 不显示。
+   */
+  const ctaText: string | null = !signedIn
+    ? null
+    : (newCount ?? 0) > 0
+      ? HOME_CAPSULE.toLearn(newCount ?? 0)
+      : (dueCount ?? 0) > 0
+        ? HOME_CAPSULE.due(dueCount ?? 0)
+        : null;
 
   const query = useQuery({
     ...lookupQueryOptions(queried, direction),
@@ -242,11 +255,27 @@ export function LookupScreen(): React.JSX.Element {
     }
     try {
       addWord(view.word);
+      // bug #3：自动入库也要给撤销 —— 与手动加星同一条人话 + 可撤销，避免"手滑查一个词就进词本"。
+      host.toast(LOOKUP_COPY.autoAdded, {
+        tone: 'success',
+        action: {
+          label: LOOKUP_COPY.favoriteToast.action,
+          onClick: (): void => {
+            try {
+              removeWord(view.word);
+            } catch {
+              host.toast(WORDBOOK_APP_COPY.deleteNotQueued, { tone: 'error', durationMs: 6000 });
+              return;
+            }
+            void queryClient.invalidateQueries({ queryKey: wordbookKeys.all });
+          },
+        },
+      });
       void queryClient.invalidateQueries({ queryKey: wordbookKeys.all });
     } catch {
       /* 入队失败不打扰用户 */
     }
-  }, [signedIn, view.kind, view.word, wordbook.data, wordbook.isSuccess, queryClient]);
+  }, [host, signedIn, view.kind, view.word, wordbook.data, wordbook.isSuccess, queryClient]);
 
   const speak = React.useCallback(
     (word: string): void => {
@@ -283,9 +312,15 @@ export function LookupScreen(): React.JSX.Element {
       data-testid="lookup-screen"
       onClickCapture={preventRawHrefNavigation}
     >
-      {/* bug_list #8：删掉 slogan（"记不住的，交给明天"）。原先 hero 与 spacer 两段是为了把
-          搜索框垫到视口上三分之一，slogan 一撤这两段就只剩空白 ⇒ 一并去掉，搜索框直接落在顶部
-          （外层 `main` 的 `pt-safe-top` 已经留好状态栏呼吸位，bug_list #4 同源）。 */}
+      {/* bug_list #8 删了 slogan；但 bug #1 要求搜索框回到"中上部"。
+          做法：不放文案，只放一段纯高度 spacer —— 未聚焦且没查询时撑出静态位（≈视口 1/4），
+          聚焦或出结果时收 0 平滑上滑（与改版前的交互一致，只是不再靠 hero 撑高度）。 */}
+      <div
+        aria-hidden="true"
+        className={`w-full shrink-0 transition-[height] duration-move ease-standard ${
+          focused || queried !== '' ? 'h-0' : 'md:h-[22vh] max-md:h-[16vh]'
+        }`}
+      />
 
       {/* 修①：搜索框固定在滚动容器顶部（`sticky top-0`），不再 `top:29%→0` 跳位。 */}
       <div
@@ -334,17 +369,21 @@ export function LookupScreen(): React.JSX.Element {
         </div>
       </div>
 
-      {/* C 胶囊：与 Web 同一组件、同一文案（§3.1.4），挂在框**之下**，不参与搜索框定位。 */}
-      <div className="flex justify-center px-4 pt-3" data-testid="lookup-cta-row">
-        <ReviewCta
-          due={dueCount ?? 0}
-          href="/study"
-          signedIn={signedIn}
-          loading={dueCount === null}
-          onNavigate={openDetail}
-          testid="lookup-review-cta"
-        />
-      </div>
+      {/* C 胶囊（bug #1）：未登录不画；有没学的词就显示"N 个词没学"，其次才是"要复习的词"，
+          两者都没有（都背完了）就整行不渲染 —— 页面上只剩搜索框。 */}
+      {ctaText !== null ? (
+        <div className="flex justify-center px-4 pt-3" data-testid="lookup-cta-row">
+          <ReviewCta
+            due={dueCount ?? 0}
+            href="/study"
+            signedIn={signedIn}
+            loading={false}
+            text={ctaText}
+            onNavigate={openDetail}
+            testid="lookup-review-cta"
+          />
+        </div>
+      ) : null}
 
       {/* E 结果区：`aria-live` 容器**常驻**（内容换、容器不换，读屏才播得出来），淡入发生在内层。 */}
       <section
