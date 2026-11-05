@@ -270,7 +270,9 @@ function stubFetch(): void {
       const written = Number((parsed as { daily_goal?: unknown } | undefined)?.daily_goal);
       const next = Number.isFinite(written) ? written : NEW_GOAL;
       getOutcome = success(next);
-      return jsonResponse(200, profileBody(next));
+      // bug #12-1：`PUT /api/profile` 的响应是 `{ok:true}`，不是 ProfileDto
+      // （客户端曾按 ProfileDto 解析，于是"写成功"被当成"服务器没响应"）。
+      return jsonResponse(200, { ok: true });
     }
     if (holdProfile) return new Promise<Response>(() => undefined);
     return jsonResponse(getOutcome.status, getOutcome.body);

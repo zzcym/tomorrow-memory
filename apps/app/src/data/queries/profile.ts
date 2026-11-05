@@ -41,8 +41,17 @@ export function meQueryOptions(enabled = false) {
   });
 }
 
-export function updateProfile(patch: ProfileUpdateInputDto) {
-  return apiPut<ProfileDto>('/api/profile', patch, { auth: true }, parseWith(ProfileDtoSchema));
+/**
+ * 写资料（`PUT /api/profile`）。
+ *
+ * ⚠ 2026-11 修：服务端这条路径返回的是 `{ ok: true }`（见 `routes/profile.ts` 的 PUT 分支），
+ * 不是 `ProfileDto`。原先这里按 `ProfileDtoSchema` 解析 ⇒ 每次都解析失败、被包成
+ * `BAD_RESPONSE`，用户看到的是「服务器刚才没响应，再试一次」——每日目标保存与昵称保存
+ * 因此一直是坏的（服务端其实已经写成功了，只是客户端把成功当成了失败）。
+ * 读侧要新数据请走 `profileQueryOptions()` 重取，不在这条写路径上回传 DTO。
+ */
+export function updateProfile(patch: ProfileUpdateInputDto): Promise<{ ok: true }> {
+  return apiPut<{ ok: true }>('/api/profile', patch, { auth: true }, parseWith(OkResultSchema));
 }
 
 /**

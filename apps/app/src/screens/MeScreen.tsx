@@ -668,9 +668,15 @@ export default function MeScreen(): React.JSX.Element {
               <button
                 type="button"
                 onClick={() => setNickDraft(account.nickname)}
-                className="max-w-full truncate text-left text-base font-semibold text-ink underline decoration-dotted underline-offset-4"
+                className="flex max-w-full items-center gap-1.5 text-left"
               >
-                {account.nickname}
+                <span className="truncate text-base font-semibold text-ink underline decoration-dotted underline-offset-4">
+                  {account.nickname}
+                </span>
+                {/* bug #12-2：不写这句，昵称看着就是纯文本，没人会想到点它。 */}
+                <span className="shrink-0 rounded-md bg-brand-soft px-1.5 py-0.5 text-2xs text-brand-strong">
+                  {SETTINGS_COPY.account.edit}
+                </span>
               </button>
             ) : (
               <div className="flex items-center gap-2">

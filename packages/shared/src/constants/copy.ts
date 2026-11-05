@@ -568,6 +568,8 @@ export const SETTINGS_COPY = {
   account: {
     changeAvatar: '更换头像',
     nicknameLabel: '昵称',
+    /** bug #12-2：昵称看起来像纯文本，用户不知道能点。加一个可见的「修改」提示。 */
+    edit: '修改',
     save: '保存',
     cancel: '取消',
     avatarUpdated: '头像已更新',
